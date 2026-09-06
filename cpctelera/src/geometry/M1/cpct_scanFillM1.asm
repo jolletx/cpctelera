@@ -17,8 +17,12 @@
 ;;  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;-------------------------------------------------------------------------------
 
+;; Algorythm: Scanline Fill
+;; Starting from a point, it will fill the area with the color specified in B register.
+;; It will stop when it finds a pixel with a different color than the one specified in B
+;; It is based on 2 loops, one based on stack of points, and one 
 
-   ;  HL = VMEM ptr
+   ;  HL = VMEM start ptr
    ;  DE = X
    ;  C  = Y
    ;  B  = New Color

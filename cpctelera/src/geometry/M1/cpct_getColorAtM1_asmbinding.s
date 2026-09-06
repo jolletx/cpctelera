@@ -33,14 +33,7 @@
 ;;      Destroyed Register values:
 ;;          AF, BC, DE, HL
 ;;
-;;    > call cpct_getColorAtM1_asm_f
-;;          HL = Adress of octet to test
-;;          A  = SubPixel to test in octet (0..3)
-;;
-;;      Destroyed Register values:
-;;          AF, BC, HL
-;;
-;;      Output : A = color (and L contains it also)
+;;      Output : A = color
 ;;
 ;; Required memory:
 ;;    TODO bytes (TODO bytes core routine + TODO bytes binding wrapper)
@@ -58,8 +51,4 @@
 
 ;; ASM entry point for fast getColorAt from asm
 cpct_getColorAtM1_asm::
-.include  /cpct_getColorAtM1_1.asm/
-
-;; Entry point for fast getColorAt from asm
-cpct_getColorAtM1_asm_f::
-.include  /cpct_getColorAtM1_2.asm/
+.include  /cpct_getColorAtM1.asm/

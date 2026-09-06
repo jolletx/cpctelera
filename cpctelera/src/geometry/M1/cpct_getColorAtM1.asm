@@ -17,8 +17,35 @@
 ;;  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;-------------------------------------------------------------------------------
 
-;;          HL = Adress of octet to test
-;;          A  = SubPixel to test in octet (0..3)
+;;          HL = Screen start Adress
+;;          DE = X
+;;          C  = Y
+
+.globl cpct_getScreenPtr_asm
+
+;; Prepare input of fast entry based on adress and subpixel
+
+    ld  a,e     ;; a = low X
+    and #0x03	;; Keep only the 2 least significant bits of X0 : subPixel
+
+    push af     ;; save subpixel
+
+    srl d       ;; d can only be 1 or 0 (319 is < 512), so one shift right to carry is enough
+    rr  e       ;; rotate e once with carry from d
+    srl e       ;; Now e is the byte offset in the line (0-79)
+
+    ld  b, c     ;; b = Y
+    ld  c, e     ;; c = X in bytes
+
+    ex  de,hl    ;; de = SCREEN_ADRESS
+
+    call cpct_getScreenPtr_asm    ;; HL = Current adress
+
+    pop af      ;; retrieve subpixel in a
+
+;; Ready for special entry
+;;     HL = Adress of octet to test
+;;     A  = SubPixel to test in octet (0..3)
 ;;
 
     ld  c,(hl)          ;; Get screen octet
@@ -40,10 +67,9 @@ computeColor:
     rl  l               ;; Set bit 0 of l using carry (carry = 0 after)
                         ;; l = low bit of color
 ;; Check high bit of color
-    or  a               ;; Here a is either 0x10 or 0... So check if 0
-    jr  z,end_getColorAt  
-    inc l               ;; Add 2 to l to set high bit of color
-    inc l               ;;  
-end_getColorAt:         ;; l = output color
-    ld  a,l             ;; stdcall_1 convention uses a, so asm also...
+    rla                 ;; a = 0x04 or 0 
+    rla                 ;; a = 0x02 or 0
+    or l                ;; put back low bit on a
+
+end_getColorAt:         ;; a = output color
     ret

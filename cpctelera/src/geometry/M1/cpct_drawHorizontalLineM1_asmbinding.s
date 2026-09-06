@@ -20,7 +20,7 @@
 
 .include "macros/cpct_undocumentedOpcodes.h.s"
 
-;; cpct_drawHorizontAlLineM1 : Fast entry point when you know all you need
+;; cpct_drawHorizontAlLineM1_asm
 ;;      (2B HL) = VMEM start adress
 ;;      (2B DE) = X0
 ;;      (2B BC) = X1
@@ -28,19 +28,8 @@
 ;; Destroyed Register values:
 ;;      AF, BC, DE, HL, IX
 ;;
-cpct_drawHorizontalLineM1::
+cpct_drawHorizontalLineM1_asm::
 
-.include  /cpct_drawHorizontalLineM1_1.asm/
+.include  /cpct_drawHorizontalLineM1.asm/
 
-;; cpct_drawHorizontAlLineM1_f : Fast entry point when you know all you need
-;;      (2B HL) = Left pixel adress (leftAdress)
-;;      (1B B ) = left subpixel
-;;      (1B C ) = right subpixel
-;;      (1B D ) = Nb OCtet difference between X1 (right) and X0 (positif) so from 0 to 79
-;;      (1B A ) = INK Color
-;; Destroyed Register values:
-;;      AF, BC, DE, HL, IX, IY
-;;
-cpct_drawHorizontalLineM1_f::    ; Entry point for fill API
-
-.include  /cpct_drawHorizontalLineM1_2.asm/
+    ret                              ;; [3] return from asm

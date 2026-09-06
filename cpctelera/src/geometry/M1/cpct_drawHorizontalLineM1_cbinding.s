@@ -32,25 +32,27 @@
 ;;  x0 and x& does not need to be sorted from left to right
 ;;  function will automatically swap them if needed
 ;;
-;;  Timing of cbinding overhead
-;;  36 microSecs, 24 bytes
+;; Required memory:
+;;    TODO bytes (TODO bytes core routine + TODO bytes binding wrapper)
 ;;
+;; Time Measures (Includes TODO us / TODO cycles binding wrapper overhead):
+;;    Get color at subPixel 0            | 101    | 11250          | 45000
+;;    Get color at subPixel 3            | 101    | 11250          | 45000
+;; (end code)
+
 _cpct_drawHorizontalLineM1::
    ld   (restore_ix), ix            ;; [6] Save IX to restore it before returning
-	
-   pop   ix                         ;; [4] IX = Return address
-   ld   (simulated_return), ix      ;; [6] Save return address for simulated return
+   pop   af                         ;; [3] AF = Return address
 
    ; Get Parameters
    ;; HL = Screen Adress / DE = X0 Coordinate 
    pop   bc                         ;; [3] bc = X1 coordinate 
    pop   ix                         ;; [4] ixh = Y0 coordinate / ixl = color
    
-   call cpct_drawHorizontalLineM1   ;; [5] Call to asm entry point
+   push af                          ;; [4] Restore return address to stack because __z88dk_callee
+
+.include  /cpct_drawHorizontalLineM1.asm/
 
 restore_ix=.+2
-   ld   ix, #0000                 ;; [4] Restore IX before returning   
-
-simulated_return=.+1
-   ld   hl, #0000                 ;; [3] HL = return address
-   jp  (hl)                         ;; [1] Do a manual "ret"
+   ld   ix, #0000                 ;; [4] Restore IX before returning  
+   ret                              ;; [3] return from c 

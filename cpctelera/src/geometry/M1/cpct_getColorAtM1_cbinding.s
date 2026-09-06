@@ -29,12 +29,17 @@
 ;;
 ;; return value:  Ink color of pixel (0..3)
 ;;
-;;  16 microSecs, 7 bytes
+;; Required memory:
+;;    TODO bytes (TODO bytes core routine + TODO bytes binding wrapper)
 ;;
+;; Time Measures (Includes TODO us / TODO cycles binding wrapper overhead):
+;;    Get color at subPixel 0            | 101    | 11250          | 45000
+;;    Get color at subPixel 3            | 101    | 11250          | 45000
+;; (end code)
+
 _cpct_getColorAtM1::
-   pop  af                     ;; [3] af = Return addressc
-   pop  bc                     ;; [3] c = y  
-   dec  sp                     ;; [6] b unused
+   pop  af                     ;; [3] af = Return address
+   pop  bc                     ;; [3] bc = y  (b should be 0  )
    push af                     ;; [4] Restore return address to stack because __z88dk_callee
 
-   jp cpct_getColorAtM1_asm    ;; Goto main entry point and use official ret
+.include  /cpct_getColorAtM1.asm/
