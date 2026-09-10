@@ -22,6 +22,9 @@
 //#####################################################################
 //### This module contains several functions and routines to manage ###
 //### geometric primitives                                          ###
+//### Coordonites M1:                                               ###
+//###    from 0,0 (left corner of screen)                           ###
+//###    to 319,199 (bottom right)                                  ###
 //#####################################################################
 //
 

@@ -196,38 +196,63 @@ void SpeedTest(void)
 		x += 8;
 	}
 
-	// Frame
+	// Global Frame
     cpct_drawLineM1_f(CPCT_VMEM_START,   0,   0, 319,   0, 2);
     cpct_drawLineM1_f(CPCT_VMEM_START, 319,   0, 319, 199, 2);
     cpct_drawLineM1_f(CPCT_VMEM_START, 319, 199,   0, 199, 2);
     cpct_drawLineM1_f(CPCT_VMEM_START,   0, 199,   0,   0, 2);
 
-    for (x = 30; x<=100; x++)
+    // Copy/paste
     {
-        for (y = 20; y<=70; y++)
+        #define XSTART  (u16)(10)
+        #define YSTART  (u16)(60)
+        #define XSIZE   (u16)(80)
+        #define YSIZE   (u16)(90)
+        #define XCOPY   (u16)(319 - XSTART - XSIZE)
+        #define XOFFSET (u16)(XCOPY - XSTART)
+
+        cpct_drawLineM1_f(CPCT_VMEM_START,   XSTART,       YSTART,       XSTART+XSIZE, YSTART,       2);
+        cpct_drawLineM1_f(CPCT_VMEM_START,   XSTART,       YSTART+YSIZE, XSTART+XSIZE, YSTART+YSIZE, 2);
+        cpct_drawLineM1_f(CPCT_VMEM_START,   XSTART,       YSTART,       XSTART,       YSTART+YSIZE, 2);
+        cpct_drawLineM1_f(CPCT_VMEM_START,   XSTART+XSIZE, YSTART,       XSTART+XSIZE, YSTART+YSIZE, 2);
+
+        cpct_drawLineM1_f(CPCT_VMEM_START,   XCOPY,       YSTART,       XCOPY+XSIZE, YSTART,       1);
+        cpct_drawLineM1_f(CPCT_VMEM_START,   XCOPY,       YSTART+YSIZE, XCOPY+XSIZE, YSTART+YSIZE, 1);
+        cpct_drawLineM1_f(CPCT_VMEM_START,   XCOPY,       YSTART,       XCOPY,       YSTART+YSIZE, 1);
+        cpct_drawLineM1_f(CPCT_VMEM_START,   XCOPY+XSIZE, YSTART,       XCOPY+XSIZE, YSTART+YSIZE, 1);
+
+        for (y = YSTART; y<=YSTART+YSIZE; y++)
         {
-            u8 col = cpct_getColorAtM1 (CPCT_VMEM_START,x,y);
-            cpct_drawPlotM1(CPCT_VMEM_START,   x+80,   y+100,col);
+            for (x = XSTART; x<=XSTART+XSIZE; x++)
+            {
+                u8 col = cpct_getColorAtM1 (CPCT_VMEM_START,x,y);
+                cpct_drawPlotM1(CPCT_VMEM_START, x+XOFFSET, y,col);
+            }
         }
     }
 
-    for (x = 0; x<60; x++)
+    // Small patch inside circles
+    for (y = 0; y<=20; y++)
     {
-        cpct_drawHorizontalLineM1(CPCT_VMEM_START,   x+40,   100+x+8*x,   x, 2);        
+        x = 160 - y;
+        u16 x1 = x + 2*y;
+        cpct_drawHorizontalLineM1(CPCT_VMEM_START, x, x1,  80+y, 1);
+        cpct_drawHorizontalLineM1(CPCT_VMEM_START, x, x1, 120-y, 2);
     }
 
+    cpct_drawStringM1("Press any key to continue", CPCT_VMEM_START + 10);
+
+    while (!cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
+    while (cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
+
+    // Clear screen multi color
     for (u8 col = 0; col<4;col++)
     {
         for (y = 0; y<=199; y++)
-            cpct_drawLineM1_f(CPCT_VMEM_START,   0,   y, 319,   y, col);        
-    }
-
-    for (u8 col = 0; col<4;col++)
-    {
-        for (y = 199; y>=0; y--)
             cpct_drawHorizontalLineM1(CPCT_VMEM_START,   0,   319,   y, col);        
     }
 }
+
 ////////////////////////////////////////
 // Main demo
 // Use line and plot to display 3d ship

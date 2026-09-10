@@ -58,7 +58,7 @@
     cp  e                   ;; compare with X0 low
     jr  nc,decodeAdresses	;; e<=c so de<bc
 ;; exchange de and bc / X0 and X1
-exchangeX:   ;; Note: Is push push pop pop better?         
+exchangeX:   ;; Note: Is push push pop pop better?  Don't think so (more nop).       
    	ld  a,e
 	ld  e,c
 	ld  c,a
@@ -113,7 +113,6 @@ decodeAdresses:
 
     ld__a_ixh               ;; Put INK Color in a
 
-    ;; We are ready for fast entry
     ;; Ok let's start drawing the line now, we have all the information we need
     ;; Here HL = Left pixel adress
     ;;      B  = left subpixel
@@ -124,15 +123,15 @@ decodeAdresses:
     ;;  Computing full 4 pixels with INK inside d
     ld  d,#0                    ;; d will contain the full octet color to use
     rra                         ;; Put bit0 of INK in Carry
-    jr  nc,testHightBitColor
+    jr  nc,testHighBitColor
     ld  d,#0xF0                 ;; d = full pixel of INK 1
-testHightBitColor:    
+testHighBitColor:    
     rra                         ;; put bit 1 of INK in carry
-    jr  nc,noHightBitColor
+    jr  nc,noHighBitColor
     ld  a,#0x0F                 ;; a = full pixel of INK 2  
     or  d                       ;; merge on d
     ld  d,a                      
-noHightBitColor:
+noHighBitColor:
                                 ;; d = full pixel octet color of ink
 
     ld  a,e                     ;; a = nbOctet
@@ -178,8 +177,8 @@ notSameOctet:
     rlca                    ;; multiply by 4
     rlca                    ;;  "
 
-    push hl                 ;; Save Adress
     push de                 ;; Save d = color and e = nbOctet
+    push hl                 ;; Save Adress
 
     ld  hl, #cpct_subPixelHorizontalMask_M1 + 3  ;; mask table with right subPixel = 3
     ld  d,#0                ;;     
@@ -187,21 +186,22 @@ notSameOctet:
     add hl,de               ;; hl = adress of mask to use
     ld  a,(hl)              ;; a = mask to use for reset pixels with new color
 
-    ld  d,a                 ;; save mask
-    and (hl)                ;; a = current screen pixels with clear pixels from mask 
+    ld  e,a                 ;; save mask
+
+    pop hl                  ;; Restore adress
+
+    and (hl)                ;; a = current screen pixels with needed cleared pixels to modify
 
     ld  b,a                 ;; b = current screen octet (cleared)
-    ld  a,d                 ;; retrieve mask
+    ld  a,e                 ;; retrieve mask
     cpl                     ;; invert mask
 
     pop de                  ;; Restore color and nbOctet
-    pop hl                  ;; Restore adress
 
     and d                   ;; set requested color to inverted pixels
     or  b                   ;; merge result with current screen octet
 
-    ld  (hl),a              ;; Set screen octet with preserved pixels around b and c
-
+    ld  (hl),a              ;; Set screen octet with preserved pixels before b
     inc hl                  ;; We have finished this first octet, increase adress
     dec e                   ;; and decrease nbOctet
 
@@ -209,27 +209,37 @@ drawFullOctets:
     ;; We will now draw needed octets with full octets 
     ;; based on e = nbOctet using a jump table
     ;; e can be 0 so in this case we will jump over everything
+    push hl                 ;;
+    push de                 ;;
+    ld  hl,#jumpTable
+
+    ld d,#0
     ld  a,#79               ;; a = max jump
     sub e                   ;; a = 79 - nbOctect (so from 0 max lines to 79)
-                            ;; jr 0 will use full table
     rla                     ;; a = a * 2 because ld (hl),d inc hl
-    ld  (#drawJrOffset),a   ;; SMC to use the correct amount of ld (hl),d inc hl
-drawJrOffset=. + 1
-    jr  #0          ;; SMC to jump over necessary code - Max code is 79 * 2 so JR works
+    ld e,a                  ;; de = offset
+    add hl,de
+
+    ld  (#jumpAdress),hl  ;; SMC to use the correct amount of ld (hl),d inc hl
+    pop de
+    pop hl
+jumpAdress=. + 1
+    jp         jumpTable    ;; SMC to jump over necessary code - JR does not work because between -128 to +127
+jumpTable:
 .rept 79
     ld  (hl),d      ;; Set screen octet with full color
     inc hl          ;; Increase adress
 .endm
 
 
-onLeftSubpixel:
+onLastOctet:
     ; We are on the last octet, deal with C subPixels from left on last adress
     ld  a,c             ;; a = right subpixel    
     cp  #3              ;; if 3 we can do full byte, if not we need to mask
     jr  z,drawLastOctet ;; go for it
 
     push hl             ;; Save Adress
-    ld  hl, #cpct_subPixelHorizontalMask_M1 + 3  ;; mask table with right subPixel = 3
+    ld  hl, #cpct_subPixelHorizontalMask_M1 ;; mask table on left subPixel
     ld  b,#0     
     ld  c,a             ;; bc = index in table
     add hl,bc           ;; hl = adress of mask to use
@@ -252,4 +262,3 @@ drawLastOctet:
     ld  (hl),d          ;; Computed color in last byte
 
 endDraw:
-    ret

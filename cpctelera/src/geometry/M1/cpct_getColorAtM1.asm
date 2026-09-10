@@ -62,14 +62,15 @@ computeColor:
     and #0x88           ;; and 0b10001000 to mask left subpixel
 
     ld  l,#0            ;; Future color
-    rla                 ;; Get Low bit of color from bit 7 in carry 
+    rla                 ;; Get Low bit of color from bit 7 in carry - a = 000l0000
                         ;; (after the AND #88 Carry=0 so bit 0 = 0)
     rl  l               ;; Set bit 0 of l using carry (carry = 0 after)
                         ;; l = low bit of color
 ;; Check high bit of color
-    rla                 ;; a = 0x04 or 0 
-    rla                 ;; a = 0x02 or 0
-    or l                ;; put back low bit on a
-
+    or a                ;; if a != 0 add 2 to current color
+    ld a,l              ;; a = 0 or a=1
+    jr z,end_getColorAt
+    inc a               ;; a += 2 to set high bit of INK
+    inc a               
 end_getColorAt:         ;; a = output color
     ret
