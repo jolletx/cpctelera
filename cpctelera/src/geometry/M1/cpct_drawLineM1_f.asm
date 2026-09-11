@@ -18,6 +18,7 @@
 ;;-------------------------------------------------------------------------------
 .globl cpct_plotColorTable_M1
 .globl cpct_plotMasksTable_M1
+.globl cpct_subPixelHorizontalMask_M1
 .globl cpct_getScreenPtr_asm
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -155,109 +156,181 @@ single_draw:
 ;; HORIZONTAL LINE FAST-PATH (DY = 0)
 ;; ============================================================================
 horizontal_draw:
-    COLOR_PEN_FROM_B              ;; [7] Calculate pre-multiplied color index
-    push  hl                      ;; [4] Preserve HL = signed DX
-    ld    a, (color_pen)          ;; [4] A = color * 4
-    ld    c, a                    ;; [1] C = color * 4
-    ld    h, #0                   ;; [2] Clear H
-    ld    l, c                    ;; [1] HL = color * 4
-    ld    de, #cpct_plotColorTable_M1 ;; [3] DE = color table base address
-    add   hl, de                  ;; [3] HL = &color_table[color * 4]
-    ld    a, (hl)                 ;; [2] Load pixel 0 byte pattern
-    inc   hl                      ;; [2] Next pixel byte
-    or    (hl)                    ;; [2] Merge pixel 1 byte pattern
-    inc   hl                      ;; [2] Next pixel byte
-    or    (hl)                    ;; [2] Merge pixel 2 byte pattern
-    inc   hl                      ;; [2] Next pixel byte
-    or    (hl)                    ;; [2] Merge pixel 3 byte pattern -> A = solid pattern
-    ld    (solid_op + 1), a       ;; [4] Store solid byte pattern into SMC
-    pop   hl                      ;; [3] Restore HL = signed DX
-    ld    de, (x0_val)            ;; [5] DE = X0 coordinate
-    add   hl, de                  ;; [3] HL = X1 = X0 + DX
-    push  hl                      ;; [4] Save X1 on stack
-    push  de                      ;; [4] Save X0 on stack
-    or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] Compare X1 and X0
-    jr    c, h_swap               ;; [2/3] IF X1 < X0 THEN swap start and end
-    pop   hl                      ;; [3] HL = start_x = min(X0, X1)
-    pop   de                      ;; [3] DE = end_x = max(X0, X1)
-    jr    h_have                  ;; [3] Jump to start processing
-h_swap:
-    pop   de                      ;; [3] DE = end_x = max(X0, X1)
-    pop   hl                      ;; [3] HL = start_x = min(X0, X1)
-h_have:
-    ld    a, l                    ;; [1] A = start_x low byte
-    and   #3                      ;; [2] A = start pixel offset (0..3)
-    ld    (rb_off_start), a       ;; [4] Store start offset
-    DIV4_HL                       ;; [8] Convert start_x to byte column
-    ld    a, l                    ;; [1] A = start byte column
-    ld    (rb_byte_start), a      ;; [4] Store start byte column
-    ld    a, e                    ;; [1] A = end_x low byte
-    and   #3                      ;; [2] A = end pixel offset (0..3)
-    ld    (rb_off_end), a         ;; [4] Store end offset
-    ex    de, hl                  ;; [1] HL = end_x, E = start byte column
-    ld    d, e                    ;; [1] D = start byte column
-    DIV4_HL                       ;; [8] Convert end_x to byte column
-    ld    a, l                    ;; [1] A = end byte column
-    ld    (rb_byte_end), a        ;; [4] Store end byte column
-    ld    e, a                    ;; [1] E = end byte column
-    ld    a, e                    ;; [1] A = end byte column
-    sub   d                       ;; [1] A = end_byte - start_byte
-    dec   a                       ;; [1] A = middle byte count
-    ld    (rb_mid_count), a       ;; [4] Store middle count
-    ld    c, d                    ;; [1] C = start byte column
-    ld    a, (y0_val)             ;; [4] A = Y0 coordinate
-    ld    b, a                    ;; [1] B = Y0 coordinate
-    ld    de, (screen_start)      ;; [5] DE = base VRAM address
-    call  cpct_getScreenPtr_asm   ;; [5] Call VRAM starting byte address helper
-    ld    a, (rb_byte_start)      ;; [4] A = start byte column
-    ld    c, a                    ;; [1] C = start byte column
-    ld    a, (rb_byte_end)        ;; [4] A = end byte column
-    cp    c                       ;; [1] Compare start_byte and end_byte
-    jp    nz, h_multi             ;; [3] IF start_byte != end_byte THEN multi-byte
+    ld  a,b                       ;; a = color_pen
+    ld  (color_pen),a             ;; Save color pen
+    ;; Compute X1 and make sure that DE < HL at the end
+    ld  a,h                       ;; a = High byte of DX
+    rla                           ;; put high bit of a in carry to check if h is < 0
+    ld  de,(x0_val)               ;; DE = X0 Coordinate (which is > X1)
+    add hl,de                     ;; HL = DX + X0 = (X1 - X0) + X0 = X1   /  /!\ Carry is not changed!
+    jr  nc, h_noExchange          ;; Check carry of rla, Jump if DX is positif so X0 < X1 (DE < HL)
+    ex de,hl                      ;; DE = X1, HL = X0 so DE < HL, reset X0 and X1 definition :)
 
-    ;; --- MONO-BYTE CASE: pixels [off_start .. off_end] ---
-    ld    a, (rb_off_start)       ;; [4] A = start pixel offset
-    ld    c, a                    ;; [1] C = current pixel offset
-h_single_loop:
-    call  h_plot_one              ;; [5] Plot pixel in single byte
-    ld    a, (rb_off_end)         ;; [4] A = end pixel offset
-    cp    c                       ;; [1] Compare with current offset
-    jp    z, end_draw_line        ;; [3] IF finished THEN jump end
-    inc   c                       ;; [1] Move to next pixel offset
-    jr    h_single_loop           ;; [3] Loop next pixel
-h_multi:
-    ;; --- START BYTE: pixels [off_start .. 3] ---
-    ld    a, (rb_off_start)       ;; [4] A = start pixel offset
-    ld    c, a                    ;; [1] C = current pixel offset
-h_start_loop:
-    call  h_plot_one              ;; [5] Plot pixel in start byte
-    inc   c                       ;; [1] Move to next pixel offset
-    ld    a, c                    ;; [1] A = current pixel offset
-    cp    #4                      ;; [2] Check byte boundary (4 pixels/byte)
-    jr    nz, h_start_loop        ;; [2/3] IF not byte boundary THEN loop
-    inc   hl                      ;; [2] Move to first middle byte column
-solid_op:
-    ld    d, #0x00                ;; [2] SMC patched solid color byte
-    ;; --- MIDDLE BYTES: Fast solid fill loop ---
-    ld    a, (rb_mid_count)       ;; [4] A = middle bytes count
-    or    a                       ;; [1] Check if 0
-    jr    z, h_no_mid             ;; [2/3] IF 0 middle bytes THEN skip loop
-    ld    b, a                    ;; [1] B = middle bytes counter
-h_mid_loop:
-    ld    (hl), d                 ;; [2] Write solid color byte directly to VRAM
-    inc   hl                      ;; [2] Move to next byte column
-    djnz  h_mid_loop              ;; [3/4] Loop until middle bytes filled
-h_no_mid:
-    ;; --- END BYTE: pixels [0 .. off_end] ---
-    ld    c, #0                   ;; [2] C = 0 (start offset for final byte)
-h_end_loop:
-    call  h_plot_one              ;; [5] Plot pixel in end byte
-    ld    a, (rb_off_end)         ;; [4] A = end pixel offset
-    cp    c                       ;; [1] Compare with current offset
-    jp    z, end_draw_line        ;; [3] IF finished THEN jump end
-    inc   c                       ;; [1] Move to next pixel offset
-    jr    h_end_loop              ;; [3] Loop next pixel
+h_noExchange:
+    ;; Compute left adress and sub pixel, and line size + last subpixel
+    ld  a,e                       ;; a= low left X0
+    and #0x03	                  ;; Keep only the 2 least significant bits of X0 : subPixel
+    ld  (rb_off_start),a          ;; Store starting subpixel
+
+    sra d                         ;; d can only be 1 or 0 (319 is < 512), so one shift right to carry is enough
+    rr  e                         ;; rotate e once with carry from d
+    srl e                         ;; Now e is the left byte offset in the line (0-39)
+    ld  a,e                       ;; a = left octet in line
+    ld  (rb_byte_start),a         ;; Store starting octet
+
+    ld  a,l                       ;; a= low X1
+    and #0x03	                  ;; Keep only the 2 least significant bits of X1 : subPixel
+    ld  (rb_off_end),a            ;; Store Ending subpixel
+
+    sra h                         ;; h can only be 1 or 0 (319 is < 512), so one shift right to carry is enough
+    rr  l                         ;; rotate l once with carry from b
+    srl l                         ;; Shift l right, now l is the Right byte offset in the line (0-39)
+    ld  a,l                       ;; a = right octet in line
+    sub e                         ;; a = right octet - left octet = nbOctet to process
+    ld  (abs_dx),a                ;; Store nb octet
+
+    ld  a,(y0_val)                ;; a = Y0
+    ld  b,a                       ;; b = Y0
+    ld  c,e                       ;; c = left octet
+    ld  de,(screen_start)         ;; de = Screen start
+    call cpct_getScreenPtr_asm    ;; HL = Left Adress
+
+h_computeFullColorOctet:          ;; compute d = octet of 4 colored pixels with color-pen
+    ld  a,(color_pen)             ;; a = color_pen
+    ld  d,#0                      ;; d will contain the full octet color to use
+    rra                           ;; Put bit0 of INK in Carry
+    jr  nc,h_testHighBitColor     ;; if bit0=0 move to next bit
+    ld  d,#0xF0                   ;; d = full pixel of INK 1
+h_testHighBitColor:
+    rra                           ;; put bit 1 of INK in carry
+    jr  nc,h_checkSameOctet         ;; if bit1 = 0 d contains the needed color information
+    ld  a,#0x0F                   ;; a = full pixel of INK 2  
+    or  d                         ;; merge on full pixel of INK 1 or 0 
+    ld  d,a                       ;; d = full octet of color_pen
+
+h_checkSameOctet:
+    ld  a,(abs_dx)                ;; a = nbOctet
+    or a                          ;; check if zero
+    jr nz,h_notSameOctet          ;; nbOctet > 0 : jump
+
+    ;; Need to change from left subpixel to right subpixel actual screen octet
+    ld  a,(rb_off_end)            ;; a = right subpixel
+    ld  c,a                       ;; c = right subpixel
+
+    ld  a,(rb_off_start)          ;; a = left subpixel
+    rlca                          ;; multiply by 4
+    rlca                          ;;  "
+    add c                         ;; a = lsp*4+rsp : index in mask table
+ 
+    push hl                       ;; Keep adress
+    ld  hl, #cpct_subPixelHorizontalMask_M1  ;; mask table
+    ld  b,#0                      ;; reset b
+    ld  c,a                       ;; bc = index in table
+    add hl,bc                     ;; hl = adress of mask to use
+    ld  a,(hl)                    ;; a = mask to use for reset pixels with new color
+    pop hl                        ;; Restore adress
+
+    ld  e,a                       ;; save mask
+    and (hl)                      ;; a = current screen pixels with clear pixels from mask   
+
+    ld  b,a                       ;; b = current screen octet (cleared from left to right subpixel)
+    ld  a,e                       ;; retrieve mask
+    cpl                           ;; invert mask
+    and d                         ;; set requested color to inverted pixelsmask
+
+    or  b                         ;; merge result with current screen octet
+    ld  d,a                       ;; use d as new color for next instruction to run
+
+    jp  h_drawLastOctet           ;; Move to last draw
+
+h_notSameOctet:
+    ; Deal from left subpixel to third on actual adress, a = NBoCTET FROM PREVIOUS CHECK
+    ld  e,a                     ;; e = nbOctet 
+    ld  a,(rb_off_start)        ;; a = left subpixel
+    or  a                       ;; if 0 we can do full pixels, if not we need to mask and move forward 1
+    jr  z,h_drawFullOctets      ;; We can draw octets from there, but we will need to check last octet
+
+    rlca                        ;; multiply by 2
+    rlca                        ;; multiply by 2
+
+    ld  b,#0                    ;; reset b
+    ld  c,a                     ;; bc = index of row to select in table
+
+    push hl                     ;; Save Adress
+    ld  hl, #cpct_subPixelHorizontalMask_M1 + 3  ;; mask table to right subPixel = 3
+    add hl,bc               ;; hl = adress of mask to use
+    ld  a,(hl)              ;; a = mask to use for reset pixels with new color
+    pop hl                  ;; Restore adress
+
+    ld  c,a                 ;; save mask
+
+    and (hl)                ;; a = current screen pixels with needed cleared pixels to modify
+
+    ld  b,a                 ;; b = current screen octet (cleared)
+    ld  a,c                 ;; retrieve mask
+    cpl                     ;; invert mask
+
+    and d                   ;; set requested color to inverted pixels
+    or  b                   ;; merge result with current screen octet
+
+    ld  (hl),a              ;; Set screen octet with preserved pixels before b
+    inc hl                  ;; We have finished this first octet, increase adress
+    dec e                   ;; and decrease nbOctet
+
+h_drawFullOctets:
+    ;; We will now draw needed octets with full octets 
+    ;; based on e = nbOctet using a jump table
+    ;; e can be 0 HERE so in this case we will jump over everything
+    push hl                 ;;
+    ld  hl,#h_jumpTable
+
+    ld  b,#0                ;; reset b
+    ld  a,#79               ;; a = max jump
+    sub e                   ;; a = 79 - nbOctect (so from 0 max width of line to 79 jump over)
+    rla                     ;; a = a * 2 because ld (hl),d inc hl
+    ld c,a                  ;; bc = offset
+    add hl,bc               ;; Adress to jump to
+
+    ld  (h_jumpAdress),hl   ;; SMC to use the correct amount of ld (hl),d inc hl based on nbOctet
+    pop hl                  ;; Restore screen adress
+h_jumpAdress=. + 1
+    jp         h_jumpTable    ;; SMC to jump over necessary code - JR does not work because between -128 to +127
+h_jumpTable:
+.rept 79
+    ld  (hl),d      ;; Set screen octet with full color
+    inc hl          ;; Increase adress
+.endm
+h_onLastOctet:
+    ; We are on the last octet, deal with C subPixels from left on last adress
+    ld  a,(rb_off_end)      ;; a = right subpixel    
+    cp  #3                  ;; Check with last subpixel
+    jr  z,h_drawLastOctet   ;; if last subpixel we can do full byte, if not we need to mask
+
+    push hl             ;; Save Adress
+    ld  hl, #cpct_subPixelHorizontalMask_M1 ;; mask table on left subPixel
+    ld  b,#0     
+    ld  c,a             ;; bc = index in table
+    add hl,bc           ;; hl = adress of mask to use
+    ld  a,(hl)          ;; a = mask to use for reset pixels with new color
+    pop hl              ;; Restore adress
+
+    ld  c,a             ;; save mask
+    and (hl)            ;; a = current screen pixels with clear pixels from mask 
+
+    ld  b,a             ;; b = current screen octet (cleared)
+    ld  a,c             ;; retrieve mask
+    cpl                 ;; invert mask
+    and d               ;; set requested color to inverted pixels
+
+    or  b               ;; merge result with current screen octet
+    ld  d,a             ;; use d as new color for next instruction to run 
+
+h_drawLastOctet:      
+    ld  (hl),d          ;; Computed color in last byte
+
+h_endDraw:
+  jp    end_draw_line           ;; [3] Jump to binding end
+
 
 ;; ============================================================================
 ;; VERTICAL LINE FAST-PATH (DX = 0)

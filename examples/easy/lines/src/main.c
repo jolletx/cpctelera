@@ -236,8 +236,10 @@ void SpeedTest(void)
     {
         x = 160 - y;
         u16 x1 = x + 2*y;
-        cpct_drawHorizontalLineM1(CPCT_VMEM_START, x, x1,  80+y, 1);
-        cpct_drawHorizontalLineM1(CPCT_VMEM_START, x, x1, 120-y, 2);
+        u16 y0 = y + 80;
+        cpct_drawLineM1_f(CPCT_VMEM_START, x, y0, x1, y0, 1);
+        y0 = 120 - y;
+        cpct_drawLineM1_f(CPCT_VMEM_START, x, y0, x1, y0, 2);
     }
 
     cpct_drawStringM1("Press any key to continue", CPCT_VMEM_START + 10);
@@ -249,7 +251,7 @@ void SpeedTest(void)
     for (u8 col = 0; col<4;col++)
     {
         for (y = 0; y<=199; y++)
-            cpct_drawHorizontalLineM1(CPCT_VMEM_START,   0,   319,   y, col);        
+            cpct_drawLineM1_f(CPCT_VMEM_START,   0,   y,   319,   y, col);        
     }
 }
 
