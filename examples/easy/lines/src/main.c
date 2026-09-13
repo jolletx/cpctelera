@@ -247,6 +247,9 @@ void SpeedTest(void)
     while (!cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
     while (cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
 
+    // Filling screen with color 3
+    cpct_scanFillM1 (CPCT_VMEM_START, 160, 60, 3);
+
     // Clear screen multi color
     for (u8 col = 0; col<4;col++)
     {

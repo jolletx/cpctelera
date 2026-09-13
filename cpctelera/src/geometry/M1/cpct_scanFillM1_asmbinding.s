@@ -23,6 +23,6 @@
 ;;
 ;;  16 microSecs, 4 bytes
 ;;
-cpct_scanFillM1::
+cpct_scanFillM1_asm::
 
 .include  /cpct_scanFillM1.asm/
