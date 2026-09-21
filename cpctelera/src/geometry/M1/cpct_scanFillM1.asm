@@ -127,11 +127,11 @@ pt_stack:                       ;; Stack of points to fill horizontaly
    ld    e,(hl)                 ;; Get current screen octet
    ld    hl,#cpct_plotColorTable_M1+15 ;; Points to individual pixel table from right subpixel
 l_tableOffset=.+1
-   jr    #0                     ;; jumps over necessary dec to points correct hl 
+   jr    l_maxjr                ;; jumps over necessary dec to points correct hl 
    dec   hl
    dec   hl
    dec   hl
-
+l_maxjr:
    ld    a,(hl)                 ;; get mask for the pixel
    and   e                      ;; masked pixel of screen octet
    ld    b,d                    ;; b = sub pixel offset
@@ -171,6 +171,9 @@ mainLoop::
    ld    (cur_adress),hl      ;; Save cur adress
    ld    (cur_byte_offset),de ;; and byte offset / subpixel
    ld    (cur_y_val),a        ;; and Y value
+
+   call  checkOldColor          ;; If point is no more old color, we have already turned around this point and fill it
+   jr    nz,mainLoop            ;; Skip it
 
 	ld    a,(new_color_full)  	  ;; A = new_color full 
    ld    b,a                    ;; b = full octet new color
