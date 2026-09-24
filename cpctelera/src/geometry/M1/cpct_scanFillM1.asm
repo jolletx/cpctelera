@@ -50,25 +50,25 @@ maxY       = 199              ;; Y limit
 ;; DATA SECTION
 ;;-------------------------------------------------------------------------------
 .area _DATA
-screen_start:    .dw 0          ;; Screen start from inputs
+screen_start::    .dw 0          ;; Screen start from inputs
 
 ;; Keep cur values ordered like this for easy incremental access
-cur_byte_offset: .db 0          ;; Current byte offset
-cur_subpixel:    .db 0          ;; Current subpixel
-cur_y_val:       .db 0          ;; Current y coordinate
-cur_adress:      .dw 0          ;; Current screen adress
+cur_byte_offset:: .db 0          ;; Current byte offset
+cur_subpixel::    .db 0          ;; Current subpixel
+cur_y_val::       .db 0          ;; Current y coordinate
+cur_adress::      .dw 0          ;; Current screen adress
 
-left_byte_offset:.db 0          ;; Left byte offset
-left_subpixel:   .db 0          ;; Left subpixel
-left_adress:     .dw 0          ;; Left screen adress
+left_byte_offset::.db 0          ;; Left byte offset
+left_subpixel::   .db 0          ;; Left subpixel
+left_adress::     .dw 0          ;; Left screen adress
 
 ; Flags
-searchFlag:      .db 0          ;; Flag to check if looking for old color or not
+searchFlag::      .db 0          ;; Flag to check if looking for old color or not
 ; Color buffers
 new_color:       .ds 4          ;; new color values for sub pixel 0..3
-new_color_full:  .db 0          ;; new color full octet for quick checks of octet
+new_color_full::  .db 0          ;; new color full octet for quick checks of octet
 old_color:       .ds 4          ;; old color values for sub pixel 0..3
-old_color_full:  .db 0          ;; old color full octet for quick fill of octet
+old_color_full::  .db 0          ;; old color full octet for quick fill of octet
 ; Stack
 stack_idx:       .db 0          ;; Stack index
 stack_adress:    .dw pt_stack   ;; Current Stack Adress to use
@@ -137,7 +137,7 @@ l_maxjr:
    ld    b,d                    ;; b = sub pixel offset
    inc   b                      ;; b = subPixel offset + 1 (1..4)   
    rrca                         ;; Rotate right for first djnz
-loop_getOldColor:
+loop_getOldColor::
    rlca                         ;; Rotate until a = subpixel 0 of old color   
    djnz  loop_getOldColor
 
@@ -146,7 +146,7 @@ loop_getOldColor:
    ld    hl,#new_color_full   ;; 
    cp    (hl)                 ;; Check if old_color == new_color
    ret   z                    ;; If equal old_color==new_color, end : nothing to replace
-initALgo:
+initALgo::
    ;; Init Stack
    xor   a                    ;; A = 0
    ld    (stack_idx),a        ;; Stack index = 0
@@ -189,7 +189,7 @@ mainLoop::
 
    ld    (cur_adress),hl        ;; Store last right adress for above and below boundaries checks
    ld    (cur_byte_offset),de   ;; Store last right byte and subpixel
-secondaryLoop::                  ;; Check lines above and below for new points
+ml_searchNewPoints::                  ;; Check lines above and below for new points
 
    ld    hl, (left_adress)      ;; Retrieve left values
    ld    de, (left_byte_offset) ;; 
@@ -206,7 +206,7 @@ checkBelow::
    jr    z,continue             ;; Cannot move up, check other line
    call  searchNewPoints        ;; Push new points inside stack if old_color found above drawn line 
 
-continue:
+continue::
    jr    mainLoop                ;; Check new point in stack
 
 searchAndDrawLeft::                 
@@ -288,25 +288,24 @@ searchNewPoints::
 ;; and move to the right until end of previously draw Line 
    ;; Init
    xor   a                      ;; a = 0
-   ld    (searchFlag),a         ;; reset search flag insertion
+   ld    (searchFlag),a         ;; reset search flag insertion - looking For old_color (jump over full new color)
 
    ;; Alternate between searching old_color and jumping above old_color on current line
    ;; Stops when end of right drawn line reached
 snp_mainLoop::
    ld    a,(searchFlag)
    or    a
-   jr    nz,snp_searchOldColorEnd
+   jr    nz,snp_searchEndOldColor
 
 ;; searchOldColor
    call  checkOldColor           ;; Do we have an old_color here?
    jr    nz,snp_nextSearchSP     ;; no, move to next subpixel or end of line
    
    call  pushPoint               ;; We have a hit, push it and switch flag 
-   or    a,#0x01                ;; set a = jr z, opcode
-   ld    (searchFlag),a         ;; SMC: And modify jump
-   jr    snp_searchOldColorEnd
-
-snp_searchOldColorEnd::
+   or    a,#0x01                ;; a != 0
+   ld    (searchFlag),a         ;; flag != 0 means, search for first pixel which is not old_color (jump over old_color)
+   jr    snp_nextSearchSP
+snp_searchEndOldColor::
    call  checkOldColor
    jr    z,snp_nextSearchSP      ;; Still old color, wait for another color
    xor   a                       ;; set a = 0
@@ -314,20 +313,54 @@ snp_searchOldColorEnd::
    ; and continue to next
 snp_nextSearchSP::
    call  increaseSubpixel         ;; move to right one subpixel
-   ret   z                        ;; stop if already at end
+   ret   z                        ;; stop if already at end of screen
    call  checkEndOfDrawnLine      ;; Check if end of draw line
-   ret   z                        ;; stop if reached
-   jr    snp_mainLoop             ;; next subpixel
+   ret   z                        ;; stop if increase has gone after drawn line
 
-checkEndOfDrawnLine::
+   ld    a,d                      ;; a = subpixel
+   or    a                        ;; check a == 0
+   jr    nz, snp_mainLoop         ;; Not starting a new octet, let's continue
+
+   ld    a,(searchFlag)
+   or    a
+   jr    z,snp_useNewColor
+
+   ld    a,(old_color_full)       ;; a = old color full octet
+   jr snp_setColorToJump
+snp_useNewColor:
+   ld    a,(new_color_full)       ;; a = old color full octet
+snp_setColorToJump:
+   ld    b,a                      ;; b = old color full octet
+snp_loopFullOctet::
+   ld    a,(cur_byte_offset)      ;; a = right X Offset
+   cp    e                        ;; compare wirth current X Offset
+   jr    z, snp_mainLoop          ;; We are on last octet (a == e), move slowly and check if last subpixel
+   ret   c                        ;; We move above last pixel (e > a), ret from there
+   ld    a,b                      ;; a = old color full octet
+   cp    (hl)                     ;; compare with screen octet
+   jr    nz,snp_mainLoop          ;; not equal so we move slowly
+   inc   e                        ;; increase X ofsset  (keep d = 0 left subpixel)
+   inc   hl                       ;; inc screen adress
+   jr    snp_loopFullOctet        ;; loop on full octets
+snp_checkLastPixel::
+   ;; call  decreaseSubpixel         ;; Better restart from previous
+   jr    snp_mainLoop          ;; in this case
+
+checkEndOfDrawnLine::            ;; Return ZFlag when last pixel is passed (still no ZFlag on last subpixel)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ld    a,(cur_byte_offset)     ;;
-   cp    e                       ;;
-   ret   nz                      ;; not on last octet
-   ld    a,(cur_subpixel)        ;;
-   cp    d                       ;; 
-   ret                           ;; ret ZFlag if de == cur byte offset/ cur_subpixel
-   
+   ld    a,(cur_byte_offset)     ;; A = right X Offset
+   cp    e                       ;; compare actual X Offset with right X Offset
+   ret   c                       ;; if e > cur X, not on last octet
+   jr    nz,cel_resetZFlag       ;; if e < cur X, line is overpassed
+   ld    a,(cur_subpixel)        ;; here e == cur X so check subpixel, A = righ subpixel
+   cp    d                       ;; compare with actual subpixel, d must be > a to fire ZFlag
+   jr    nc,cel_resetZFlag       ;; d <= a , no flag
+   xor   a                       ;; force ZFLag ON
+   ret   nc                      ;; if d <= cur subPixel, ZFlag is set appropiately
+                                 ;; if d> cur subpuixel need to set ZFlag
+cel_resetZFlag:   
+   or   #0x01                    ;; force ZFlag to OFF
+   ret                           ;; 
 
 plotPixel::                            ;; Plot pixel D at (hl) in new_color
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

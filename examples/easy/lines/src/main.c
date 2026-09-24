@@ -242,13 +242,14 @@ void SpeedTest(void)
         cpct_drawLineM1_f(CPCT_VMEM_START, x, y0, x1, y0, 2);
     }
 
-    cpct_drawStringM1("Press any key to continue", CPCT_VMEM_START + 10);
 
-    while (!cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
-    while (cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
+    cpct_drawStringM1("                         ", CPCT_VMEM_START + 10);
 
     // Filling screen with color 3
-    cpct_scanFillM1 (CPCT_VMEM_START, 160, 60, 3);
+    cpct_scanFillM1 (CPCT_VMEM_START, 0, 199, 1);
+    cpct_scanFillM1 (CPCT_VMEM_START, 160, 60, 2);
+
+    cpct_drawStringM1("Press any key to continue", CPCT_VMEM_START + 10);
 
     while (!cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
     while (cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
