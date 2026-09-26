@@ -1,0 +1,193 @@
+Instruction;Time
+ld r,r;1
+ld r,(hl);2
+ld (hl),r;2
+ld r,s;2
+ld s,r;2
+ld (qq+d),r;5
+ld r,(qq+d);5
+ld (hl),n;3
+ld (qq+d),n;3
+ld (bc),a;2
+ld (de),a;2
+ld (nn),a;4
+ld a,(bc);2
+ld a,(de);2
+ld a,(nn);4
+ld pp,nn;3
+ld qq,nn;4
+ld (nn),hl;5
+ld (nn),pp;6
+ld (nn),qq;6
+ld hl,(nn);5
+ld pp,(nn);6
+ld qq,(nn);6
+ld sp,hl;2
+ld sp,qq;3
+pop pp;3
+pop qq;4
+push pp;4
+push qq;5
+inc pp;2
+inc qq;3
+dec pp;2
+dec qq;3
+add hl,pp;3
+add qq,pp;4
+add qq,qq;4
+adc hl,pp;4
+adc hl,qq;4
+sbc hl,pp;4
+sbc hl,qq;4
+inc r;1
+inc s;2
+inc (hl);3
+inc (qq+d);6
+dec r;1
+dec s;2
+dec (hl);3
+dec (qq+d);6
+add a,n;2
+add a,r;1
+add a,s;2
+add a,(hl);2
+add a,(qq+d);5
+adc a,n;2
+adc a,r;1
+adc a,s;2
+adc a,(hl);2
+adc a,(qq+d);5
+sub n;2
+sub r;1
+sub s;2
+sub (hl);2
+sub (qq+d);5
+sbc a,n;2
+sbc a,r;1
+sbc a,s;2
+sbc a,(hl);2
+sbc a,(qq+d);5
+cp n;2
+cp r;1
+cp s;2
+cp (hl);2
+cp (qq+d);5
+and n;2
+and r;1
+and s;2
+and (hl);2
+and (qq+d);5
+xor n;2
+xor r;1
+xor s;2
+xor (hl);2
+xor (qq+d);5
+or n;2
+or r;1
+or s;2
+or (hl);2
+or (qq+d);5
+daa;1
+rrd;5
+rld;5
+rlca;1
+rrca;1
+rla;1
+rra;1
+rlc r;2
+rlc (qq+d)->,r;7
+rlc (hl);4
+rlc (qq+d);7
+rrc r;2
+rrc (qq+d)->,r;7
+rrc (hl);4
+rrc (qq+d);7
+rl r;2
+rl (qq+d)->,r;7
+rl (hl);4
+rl (qq+d);7
+rr r;2
+rr (qq+d)->,r;7
+rr (hl);4
+rr (qq+d);7
+sla r;2
+sla (qq+d)->,r;7
+sla (hl);4
+sla (qq+d);7
+sra r;2
+sra (qq+d)->,r;7
+sra (hl);4
+sra (qq+d);7
+sll r;2
+sll (qq+d)->,r;7
+sll (hl);4
+sll (qq+d);7
+srl r;2
+srl (qq+d)->,r;7
+srl (hl);4
+srl (qq+d);7
+bit b,r;2
+bit b,(hl);3
+bit b,(qq+d);6 
+res b,r;2
+res b,(qq+d)->,r;7
+res b,(hl);4
+res b,(qq+d);7
+set b,r;2
+set b,(qq+d)->,r;7
+set b,(hl);4
+set b,(qq+d);7
+cpl;1
+neg;2
+ldi;5
+ldd;5
+ldir;5/6
+lddr;5/6
+cpi;4
+cpd;4
+cpir;4/6
+cpdr;4/6
+ini;5
+ind;5
+inir;5/6
+indr;5/6
+outi;5
+outd;5
+otir;5/6
+otdr;5/6
+in a,(n);3
+in r,(c);4
+in f,(c);4
+out (n),a;3
+out (c),r;4
+out (c),0;4
+rst n;4
+call nn;5
+call cc,nn;3/5
+jp (hl);1
+jp (qq);2
+jp nn;3
+jp cc,nn;3
+jr d;3
+jr cc,d;2/3
+djnz d;2/3
+ret;3
+ret cc;2/4
+reti;4
+retn;4
+ld i,a;3
+ld r,a;3
+ld a,i;3
+ld a,r;3
+di;1
+ei;1
+im n;2
+halt;1
+nop;1
+scf;1
+ccf;1
+exx;1
+ex de,hl;1
+ex (sp),hl;6
+ex (sp),qq;7
+ex af,af';1

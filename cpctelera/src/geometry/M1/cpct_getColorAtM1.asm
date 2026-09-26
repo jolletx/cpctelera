@@ -17,60 +17,47 @@
 ;;  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;-------------------------------------------------------------------------------
 
+.globl cpct_getScreenPtr_asm
+
 ;;          HL = Screen start Adress
 ;;          DE = X
 ;;          C  = Y
 
-.globl cpct_getScreenPtr_asm
+    ld      a,e                     ;; [1] a = low X
+    and     #0x03                   ;; [2] Keep only the 2 least significant bits of X0 : subPixel
 
-;; Prepare input of fast entry based on adress and subpixel
+    push    af                      ;; [4] save subpixel
+    srl     d                       ;; [2] d can only be 1 or 0 (319 is < 512), so one shift right to carry is enough
+    rr      e                       ;; [2] rotate e once with carry from d
+    srl     e                       ;; [2] Now e is the byte offset in the line (0-79)
+    ld      b, c                    ;; [1] b = Y
+    ld      c, e                    ;; [1] c = X in bytes
+    ex      de,hl                   ;; [1] de = SCREEN_ADRESS
+    call    cpct_getScreenPtr_asm   ;; [5] HL = Current adress
+    pop     af                      ;; [3] retrieve subpixel in a
 
-    ld  a,e     ;; a = low X
-    and #0x03	;; Keep only the 2 least significant bits of X0 : subPixel
+    ld      c,(hl)                  ;; [2] Get screen octet
+    or      a                       ;; [2] Check if subpixel is 0, if so start the check
+    jr      z,computeColor          ;; [3-2] if last, jump
 
-    push af     ;; save subpixel
-
-    srl d       ;; d can only be 1 or 0 (319 is < 512), so one shift right to carry is enough
-    rr  e       ;; rotate e once with carry from d
-    srl e       ;; Now e is the byte offset in the line (0-79)
-
-    ld  b, c     ;; b = Y
-    ld  c, e     ;; c = X in bytes
-
-    ex  de,hl    ;; de = SCREEN_ADRESS
-
-    call cpct_getScreenPtr_asm    ;; HL = Current adress
-
-    pop af      ;; retrieve subpixel in a
-
-;; Ready for special entry
-;;     HL = Adress of octet to test
-;;     A  = SubPixel to test in octet (0..3)
-;;
-
-    ld  c,(hl)          ;; Get screen octet
-
-    or  a               ;;; Check if subpixel is 0, if so start the check
-    jr  z,computeColor  ;; if last, jump
-
-    ld  b,a             ;; for loop
+    ld      b,a                     ;; [1] for loop
 subpixel_loop:
-    sla c               ;; shift screen octet to the left
-    djnz subpixel_loop  ;; until last subpixel on left
+    sla     c                       ;; [2] shift screen octet to the left
+    djnz    subpixel_loop           ;; [3-2] until last subpixel on left
 computeColor:
-    ld  a,c             ;; let's decode screen value
-    and #0x88           ;; and 0b10001000 to mask left subpixel
+    ld      a,c                     ;; [1] let's decode screen value
+    and     #0x88                   ;; [2] and 0b10001000 to mask subpixel 0
 
-    ld  l,#0            ;; Future color
-    rla                 ;; Get Low bit of color from bit 7 in carry - a = 000l0000
-                        ;; (after the AND #88 Carry=0 so bit 0 = 0)
-    rl  l               ;; Set bit 0 of l using carry (carry = 0 after)
-                        ;; l = low bit of color
+    ld      l,#0                    ;; [2] Future color
+    rla                             ;; [1] Get Low bit of color from bit 7 in carry - a = 000x0000 (x is the high bit of subpixel)
+                                    ;; (after the AND #88 Carry=0 so bit 0 = 0)
+    rl      l                       ;; [2] Set bit 0 of l using carry (carry = 0 after)
+                                    ;; l = low bit of color (0 or 1, don't care)
 ;; Check high bit of color
-    or a                ;; if a != 0 add 2 to current color
-    ld a,l              ;; a = 0 or a=1
-    jr z,end_getColorAt
-    inc a               ;; a += 2 to set high bit of INK
-    inc a               
-end_getColorAt:         ;; a = output color
-    ret
+    or      a                       ;; [2] if a != 0 add 2 to current color
+    ld      a,l                     ;; [1] a = 0 or a=1
+    jr      z,end_getColorAt        ;; [3-2] Jump over increase if no high bit found with 'or a'
+    inc     a                       ;; [1] a += 2 to set high bit of INK
+    inc     a                       ;; [1]
+end_getColorAt:                     ;; a = output color
+    ret                             ;; [2] returns

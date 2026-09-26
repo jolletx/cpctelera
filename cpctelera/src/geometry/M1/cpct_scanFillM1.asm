@@ -19,65 +19,77 @@
 
 ;; Algorythm: Scanline Fill
 ;; Starting from a point, it will fill the area with the color specified in B register.
-;; It will stop when it finds a pixel with a different color than the one specified in B
+;; It will stop when it finds a pixel with a different color than the one found in X,Y
 
 ;; COMMENTS
-;; Init algo: Get current color under X,Y and push X,Y into stack
-;; Main loop entry - Exit IF Stack is empty else Pop next X,Y
-;;     Loop to find X left value of line to draw
-;;     Init SubLoop, Keep left X value and init flags found 
-;;     above or below (FU/FB), FL used to draw a line 
-;;     (more than one pixel)
-;;          SubLoop Entry point - exit SubLoop if end of line
-;;          Get Above DY=1 and Below DY=-1 pixel if possible,
-;;          default NewColor so tests on oldcolor will failed
-;;          Deal with Above then Below lines to see if a new 
-;;          pixel should be pushed (minimizing the number of 
-;;          push with FU/FB)
-;;          Next pixel for SubLoop
-
+;; Init algo: 
+;;    get screen adress from X,Y, compute X Offset and subpixel, get old color on X,Y
+;;    Compute new and old_color subpixels and full octet, exit if new color == old color
+;;    Push X Offset, subpixel and Y in point stack 
+;; Main loop:
+;;     pop a point from stack - Exit is stack was empty (no more thigs to do)
+;;     drawOnLeft to find left most pixel which is still old_color, try to use full_cotet if possible. Stop at begining of screen if needed.
+;;     drawOnRight to find right most pixel which is still old_color, try to use full_cotet if possible. Stop at end of screen if needed.
+;;     get left side of line on above line (decreasing Y)   (do it after with below line (increase y)
+;;     initSubLoop
+;;          set a search flag to 'old_color '(other value is 'not old_color')
+;;     subLoop
+;;          if searchFlag is search For Old Color
+;;             check if pixel is old color
+;;             if yes
+;;                pushcurrent  point into stack and set search flag to 'not old color'
+;;          else  (search fo rnot old color)
+;;             check if pixel is old color
+;;             if no
+;;                set search flag to 'old color'
+;;          endif
+;;          move to next pixel on the right, check if end of drawn line reached to exit subLoop
+;;          try to jump over full octets
+;;             old color if 'not old color' (will slow back to pixel checks )
+;;             new_color if 'old_color'  (only case we are sure)
+;;             fall back to pixel checking in doubt, exit subLoop if end of drawn line is reached
 
 .globl cpct_plotColorTable_M1
 .globl cpct_plotMasksTable_M1
 .globl cpct_getScreenPtr_asm
 
 ;; Special values 
-STACK_SIZE = 30               ;; Max number of elements in points stack
-maxX       = 79               ;; X byte limit
-maxY       = 199              ;; Y limit
+STACK_SIZE = 30                  ;; Max number of elements in points stack
+maxX       = 79                  ;; X byte limit
+maxY       = 199                 ;; Y limit
 
 ;;-------------------------------------------------------------------------------
 ;; DATA SECTION
 ;;-------------------------------------------------------------------------------
 .area _DATA
-screen_start::    .dw 0          ;; Screen start from inputs
+screen_start:     .dw 0          ;; Screen start from inputs
 
 ;; Keep cur values ordered like this for easy incremental access
-cur_byte_offset:: .db 0          ;; Current byte offset
-cur_subpixel::    .db 0          ;; Current subpixel
-cur_y_val::       .db 0          ;; Current y coordinate
-cur_adress::      .dw 0          ;; Current screen adress
+cur_byte_offset:  .db 0          ;; Current byte offset
+cur_subpixel:     .db 0          ;; Current subpixel
+cur_y_val:        .db 0          ;; Current y coordinate
+cur_adress:       .dw 0          ;; Current screen adress
 
-left_byte_offset::.db 0          ;; Left byte offset
-left_subpixel::   .db 0          ;; Left subpixel
-left_adress::     .dw 0          ;; Left screen adress
+left_byte_offset: .db 0          ;; Left byte offset
+left_subpixel:    .db 0          ;; Left subpixel
+left_adress:      .dw 0          ;; Left screen adress
 
 ; Flags
-searchFlag::      .db 0          ;; Flag to check if looking for old color or not
+searchFlag:       .db 0          ;; Flag to check if looking for old color or not
 ; Color buffers
-new_color:       .ds 4          ;; new color values for sub pixel 0..3
-new_color_full::  .db 0          ;; new color full octet for quick checks of octet
-old_color:       .ds 4          ;; old color values for sub pixel 0..3
-old_color_full::  .db 0          ;; old color full octet for quick fill of octet
+new_color:        .ds 4          ;; new color values for sub pixel 0..3
+new_color_full:   .db 0          ;; new color full octet for quick checks of octet
+old_color:        .ds 4          ;; old color values for sub pixel 0..3
+old_color_full:   .db 0          ;; old color full octet for quick fill of octet
 ; Stack
-stack_idx:       .db 0          ;; Stack index
-stack_adress:    .dw pt_stack   ;; Current Stack Adress to use
-pt_stack:                       ;; Stack of points to fill horizontaly
-            .rept STACK_SIZE    ;; Allocate a fixed size stack of points 
-                .db 0           ;; X Octet from left (0..79)
-                .db 0           ;; Sub pixel offset  (0..3)
-                .db 0           ;; Y coordinates from top (0..199)
-            .endm
+stack_idx:        .db 0          ;; Stack index
+stack_adress:     .dw pt_stack   ;; Current Stack Adress to use
+pt_stack:                        ;; Stack of points to fill horizontaly
+   .rept STACK_SIZE              ;; Allocate a fixed size stack of points 
+      .db 0                      ;; X Octet from left (0..79)
+      .db 0                      ;; Sub pixel offset  (0..3)
+      .db 0                      ;; Y coordinates from top (0..199)
+   .endm
 
 ;;-------------------------------------------------------------------------------
 ;; CODE SECTION
@@ -87,455 +99,446 @@ pt_stack:                       ;; Stack of points to fill horizontaly
    ;  HL = VMEM start ptr
    ;  DE = X
    ;  C  = Y
-   ;  B  = New Color
+   ;  B  = New Color 
 
-   ld    (screen_start),hl    ;; Store VMem start
-   ld    a,c                  ;; A = Y coord
-   ld    (cur_y_val),a        ;; Store Y value
+   ld    (screen_start),hl       ;; [5] Store VMem start
+   ld    a,c                     ;; [1] A = Y coord
+   ld    (cur_y_val),a           ;; [4] Store Y value
 
    ;; Compute new color values for sub pixel 0..3
    ;; compute sub pixel 0
-   xor   a                    ;; A = 0
-   rr    b                    ;; B = New Color >> 1 , Carry = low bit of New Color
-   rra                        ;; Bit 7 of A = Low bit of New_color
-   sla   b                    ;; B = High bit of new color in bit 1
-   sla   b                    ;; B = High bit of new color in bit 2
-   sla   b                    ;; B = High bit of new color in bit 3
-   or    b                    ;; A = New Color for sub pixel 0   
-   ld    hl,#new_color        ;; HL = new_color table / A = new color for sub pixel 0
-   call  storeColor           ;; Store old color values for sub pixel 0..3 and a = full octet
+   xor   a                       ;; [2] A = 0
+   rr    b                       ;; [2] B = New Color >> 1 , Carry = low bit of New Color
+   rra                           ;; [1] Bit 7 of A = Low bit of New_color
+   sla   b                       ;; [2] B = High bit of new color in bit 1
+   sla   b                       ;; [2] B = High bit of new color in bit 2
+   sla   b                       ;; [2] B = High bit of new color in bit 3
+   or    b                       ;; [2] A = New Color for sub pixel 0
+   ld    hl,#new_color           ;; [3] HL = new_color table / A = new color for sub pixel 0
+   call  storeColor              ;; [5] Store old color values for sub pixel 0..3 and a = full octet
 
    ;; Compute Screen adress and sub pixel offset from X,Y
-   ld    a,e                   ;; A = low byte X
-   and   #3                    ;; A = Sub Pixel offset
-   ld    (cur_subpixel),a      ;; Store current subpixel
-   srl   d                      ;; d can only be 1 or 0 (319 is < 512), so one shift right to carry is enough
-   rr    e                      ;; rotate e once with carry from d
-   srl   e                      ;; Now e is the byte offset in the line (0-79)   
-   ld    a,e                     
-   ld    (cur_byte_offset),a    ;; Store current byte offset
-   ld    b, c                   ;; b = Y
-   ld    c, e                   ;; c = X in bytes
-   ld    de,(screen_start)      ;; de = VMEM_START_ADRESS
-   call  cpct_getScreenPtr_asm  ;; HL = Current adress
+   ld    a,e                     ;; [1] A = low byte X
+   and   #3                      ;; [2] A = Sub Pixel offset
+   ld    (cur_subpixel),a        ;; [4] Store current subpixel
+   srl   d                       ;; [2] d can only be 1 or 0 (319 is < 512), so one shift right to carry is enough
+   rr    e                       ;; [2] rotate e once with carry from d
+   srl   e                       ;; [2] Now e is the byte offset in the line (0-79)
+   ld    a,e                     ;; [1] A = current byte offset
+   ld    (cur_byte_offset),a     ;; [4] Store current byte offset
+   ld    b, c                    ;; [1] b = Y
+   ld    c, e                    ;; [1] c = X in bytes
+   ld    de,(screen_start)       ;; [6] de = VMEM_START_ADRESS
+   call  cpct_getScreenPtr_asm   ;; [5] HL = Current adress
 
    ;; Get old color from adress HL and sub pixel offset
-   ld    a,(cur_subpixel)       ;; A = Subpixel
-   ld    d,a                    ;; put back subpixel in d
-
-   ld    (l_tableOffset),a      ;; SMC: Change jmp indexation with sub pixel offset
-   ld    e,(hl)                 ;; Get current screen octet
-   ld    hl,#cpct_plotColorTable_M1+15 ;; Points to individual pixel table from right subpixel
+   ld    a,(cur_subpixel)        ;; [4] A = Subpixel
+   ld    d,a                     ;; [1] put back subpixel in d
+   ld    (l_tableOffset),a       ;; [4] SMC: Change jmp indexation with sub pixel offset
+   ld    e,(hl)                  ;; [2] Get current screen octet
+   ld    hl,#cpct_plotColorTable_M1+15 ;; [3] Points to individual pixel table from right subpixel
 l_tableOffset=.+1
-   jr    l_maxjr                ;; jumps over necessary dec to points correct hl 
-   dec   hl
-   dec   hl
-   dec   hl
+   jr    l_maxjr                 ;; [3] jumps over necessary dec to points correct hl
+   dec   hl                      ;; [2] get adress of subpixel 0
+   dec   hl                      ;; [2] get adress of subpixel 1
+   dec   hl                      ;; [2] get adress of subpixel 2
 l_maxjr:
-   ld    a,(hl)                 ;; get mask for the pixel
-   and   e                      ;; masked pixel of screen octet
-   ld    b,d                    ;; b = sub pixel offset
-   inc   b                      ;; b = subPixel offset + 1 (1..4)   
-   rrca                         ;; Rotate right for first djnz
-loop_getOldColor::
-   rlca                         ;; Rotate until a = subpixel 0 of old color   
-   djnz  loop_getOldColor
+   ld    a,(hl)                  ;; [2] get mask for the pixel
+   and   e                       ;; [2] masked pixel of screen octet
+   ld    b,d                     ;; [1] b = sub pixel offset
+   inc   b                       ;; [1] b = subPixel offset + 1 (1..4)
+   rrca                          ;; [1] Rotate right for first djnz
+loop_getOldColor:
+   rlca                          ;; [1] Rotate until a = subpixel 0 of old color
+   djnz  loop_getOldColor        ;; [3-2] Loop on B
 
-   ld    hl,#old_color        ;; HL = old_color table  / A = old color for sub pixel 0
-   call  storeColor           ;; Store old color values and a = full octet old color
-   ld    hl,#new_color_full   ;; 
-   cp    (hl)                 ;; Check if old_color == new_color
-   ret   z                    ;; If equal old_color==new_color, end : nothing to replace
-initALgo::
+   ld    hl,#old_color           ;; [3] HL = old_color table  / A = old color for sub pixel 0
+   call  storeColor              ;; [5] Store old color values and a = full octet old color
+   ld    hl,#new_color_full      ;; [3]
+   cp    (hl)                    ;; [2] Check if old_color == new_color
+   ret   z                       ;; [4-2] If equal old_color==new_color, end : nothing to replace
+initALgo:
    ;; Init Stack
-   xor   a                    ;; A = 0
-   ld    (stack_idx),a        ;; Stack index = 0
-   ld    a,<#pt_stack         ;; A = low byte of Stack Adress
-   ld    (stack_adress),a     ;; Init low Stack Adress
-   ld    a,>#pt_stack         ;; A = high byte of Stack Adress
-   ld    (stack_adress+1),a   ;; Init high Stack Adress
+   xor   a                       ;; [2] A = 0
+   ld    (stack_idx),a           ;; [4] Stack index = 0
+   ld    a,<#pt_stack            ;; [2] A = low byte of Stack Adress
+   ld    (stack_adress),a        ;; [4] Init low Stack Adress
+   ld    a,>#pt_stack            ;; [2] A = high byte of Stack Adress
+   ld    (stack_adress+1),a      ;; [4] Init high Stack Adress
 
-   ld    de,(cur_byte_offset) ;; Retrieve current values for init
-   ld    a,(cur_y_val)        ;; Retrieve Y value
-   ld    c,a                  ;; c = y val
+   ld    de,(cur_byte_offset)    ;; [6] Retrieve current values for init
+   ld    a,(cur_y_val)           ;; [4] Retrieve Y value
+   ld    c,a                     ;; [1] c = y val
 
-   call  pushPoint            ;; Push current point DE, C into stack
+   call  pushPoint               ;; [5] Push current point DE, C into stack
 
-   ;; During loop, D = subpixel, E = X-octet, C = Y, HL = compute adress based on E/C 
-mainLoop::
-   call  popPoint             ;; Pop next point from stack into DE, C
-   ret    z                   ;; If stack is empty, algo is finished
+   ;; During loop, D = subpixel, E = X-octet, C = Y, HL = compute adress based on E/C
+mainLoop:
+   call  popPoint                ;; [5] Pop next point from stack into DE, C
+   ret    z                      ;; [4-2] If stack is empty, algo is finished
 
-   call  computeAdress        ;; Retrieve HL adress based on E,C (untouched)
-   ld    a,c                  ;; a = y value
-   ld    (cur_adress),hl      ;; Save cur adress
-   ld    (cur_byte_offset),de ;; and byte offset / subpixel
-   ld    (cur_y_val),a        ;; and Y value
+   call  computeAdress           ;; [5] Retrieve HL adress based on E,C (untouched)
+   ld    a,c                     ;; [1] a = y value
+   ld    (cur_adress),hl         ;; [5] Save cur adress
+   ld    (cur_byte_offset),de    ;; [6] and byte offset / subpixel
+   ld    (cur_y_val),a           ;; [4] and Y value
 
-   call  checkOldColor          ;; If point is no more old color, we have already turned around this point and fill it
-   jr    nz,mainLoop            ;; Skip it
+   call  checkOldColor           ;; [5] If point is no more old color, we have already turned around this point and fill it
+   jr    nz,mainLoop             ;; [3-2] Skip it
 
-	ld    a,(new_color_full)  	  ;; A = new_color full 
-   ld    b,a                    ;; b = full octet new color
+	ld    a,(new_color_full)  	   ;; [4] A = new_color full
+   ld    b,a                     ;; [1] b = full octet new color
 
-   call  searchAndDrawLeft      ;; Find first left pixel which is not an old color
+   call  searchAndDrawLeft       ;; [5] Find first left pixel which is not an old color
 
-   ld    (left_adress),hl       ;; Store last old color left adress
-   ld    (left_byte_offset),de  ;; Store last old color Left byte and subpixel
+   ld    (left_adress),hl        ;; [5] Store last old color left adress
+   ld    (left_byte_offset),de   ;; [6] Store last old color Left byte and subpixel
 
-   ld    hl, (cur_adress)       ;; Retrieve starting values
-   ld    de, (cur_byte_offset)  ;;      "       "      "
-   call  searchAndDrawRight     ;; Find first right pixel which is not an old color
+   ld    hl, (cur_adress)        ;; [5] Retrieve starting values
+   ld    de, (cur_byte_offset)   ;; [6] "       "      "
+   call  searchAndDrawRight      ;; [5] Find first right pixel which is not an old color
 
-   ld    (cur_adress),hl        ;; Store last right adress for above and below boundaries checks
-   ld    (cur_byte_offset),de   ;; Store last right byte and subpixel
-ml_searchNewPoints::                  ;; Check lines above and below for new points
+   ld    (cur_adress),hl         ;; [5] Store last right adress for above and below boundaries checks
+   ld    (cur_byte_offset),de    ;; [6] Store last right byte and subpixel
+ml_searchNewPoints:              ;; Check lines above and below for new points
 
-   ld    hl, (left_adress)      ;; Retrieve left values
-   ld    de, (left_byte_offset) ;; 
+   ld    hl, (left_adress)       ;; [5] Retrieve left values
+   ld    de, (left_byte_offset)  ;; [6]
 
    ;; Move along upper line to check if new points should be stacked
-   call  changeYUp              ;; Compute a new HL and C, z if top of screen reached
-   jr    z,checkBelow           ;; Cannot move up, check other line
-   call  searchNewPoints        ;; Push new points inside stack if old_color found above drawn line 
-checkBelow::
-   ld    hl, (left_adress)      ;; Retrieve left values
-   ld    de, (left_byte_offset) ;;
-   call  changeYDown            ;; Compute a new HL and C
-   call  changeYDown            ;; Compute a new HL and C, z if top of screen reached
-   jr    z,continue             ;; Cannot move up, check other line
-   call  searchNewPoints        ;; Push new points inside stack if old_color found above drawn line 
+   call  changeYUp               ;; [5] Compute a new HL and C, z if top of screen reached
+   jr    z,checkBelow            ;; [3-2] Cannot move up, check other line
+   call  searchNewPoints         ;; [5] Push new points inside stack if old_color found above drawn line
+checkBelow:
+   ld    hl, (left_adress)       ;; [5] Retrieve left values
+   ld    de, (left_byte_offset)  ;; [6]
+   call  changeYDown             ;; [5] Compute a new HL and C
+   call  changeYDown             ;; [5] Compute a new HL and C, z if top of screen reached
+   jr    z,continue              ;; [3-2] Cannot move up, check other line
+   call  searchNewPoints         ;; [5] Push new points inside stack if old_color found above drawn line
+continue:
+   jr    mainLoop                ;; [3] Check new point in stack
 
-continue::
-   jr    mainLoop                ;; Check new point in stack
-
-searchAndDrawLeft::                 
+searchAndDrawLeft:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Move HL / DE / B until a pixel which is not old_color or left of screen
 ;; First pixel is set here
 sdl_loopSubpixel:
-   call  plotPixel             ;; set new color of d subpixel at HL, first pixel is drawn here
-   call  decreaseSubpixel
-   ret   z                     ;; if ZFLag, we have reach left line boundary
+   call  plotPixel               ;; [5] set new color of d subpixel at HL, first pixel is drawn here
+   call  decreaseSubpixel        ;; [5] move cur pixel to the left
+   ret   z                       ;; [4-2] if ZFLag, we have reach left screen boundary
 
-   ld    a,d                   ;; a = subpixel
-   cp    #0x03                 ;; check if right subpixel (so we reached a new octet)
-   jr    nz, sdl_checkSubpixel ;; No ?  Let's check individual subpixel
+   ld    a,d                     ;; [1] a = subpixel
+   cp    #0x03                   ;; [2] check if right subpixel (so we reached a new octet)
+   jr    nz, sdl_checkSubpixel   ;; [3-2] No ?  Let's check individual subpixel
 
-   ld    a,(new_color_full)    ;; a = new color full octet
-   ld    b,a                   ;; c = new color full octet
-   ld    a,(old_color_full)    ;; a = old color full octet
+   ld    a,(new_color_full)      ;; [4] a = new color full octet
+   ld    b,a                     ;; [1] c = new color full octet
+   ld    a,(old_color_full)      ;; [4] a = old color full octet
 sdl_loopFullOctet:
-   cp    (hl)                  ;; check with screen octet
-   jr    nz,sdl_checkSubpixel  ;; if not full octet let's do it one subpixel by one subpixel
-   ld    (hl),b                ;; Set full octet to new color
-   dec   hl                    ;; decrease adress
-   dec   e                     ;; decrease X OCtet
-   jp    p, sdl_loopFullOctet  ;; if positif or 0 loop
-   ld    d,#0                  ;; d = left subpixel 
-   inc   hl                    ;; move back to last adress
-   inc   e                     ;; set e = 0, so ZFlag is set
-   ret                         ;; ret with ZFlag set
-sdl_checkSubpixel::
-   call  checkOldColor         ;; is subpixel of old color
-   jr    z,sdl_loopSubpixel    ;; if old color draw it and continue
+   cp    (hl)                    ;; [2] check with screen octet
+   jr    nz,sdl_checkSubpixel    ;; [3-2] if not full octet let's do it one subpixel by one subpixel
+   ld    (hl),b                  ;; [2] Set full octet to new color
+   dec   hl                      ;; [2] decrease adress
+   dec   e                       ;; [1] decrease X OCtet
+   jp    p, sdl_loopFullOctet    ;; [3] if positif or 0 loop
+   ld    d,#0                    ;; [2] d = left subpixel
+   inc   hl                      ;; [2] move back to last adress
+   inc   e                       ;; [1] set e = 0, so ZFlag is set
+   ret                           ;; [3] ret with ZFlag set
+sdl_checkSubpixel:
+   call  checkOldColor           ;; [5] is subpixel of old color
+   jr    z,sdl_loopSubpixel      ;; [3-2] if old color draw it and continue
 
-   call  increaseSubpixel      ;; if not, last subpixel was the last one
-   ret                         ;; return
+   call  increaseSubpixel        ;; [5] if not, last subpixel was the last one
+   ret                           ;; [3] return
 
-searchAndDrawRight::            ;; Move HL / DE until a pixel which is not old_color or Right of screen - b = full octet new_color
+searchAndDrawRight:              ;; Move HL / DE until a pixel which is not old_color or Right of screen - b = full octet new_color
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Move and draw HL / DE  until a pixel which is not old_color or right of screen
 ;; First pixel is skipped here (because leftDraw has already done it)
 sdr_loopSubpixel:
-   call  increaseSubpixel
-   ret   z                     ;; if ZFLag, we have reach left line boundary
+   call  increaseSubpixel        ;; [5] Move to subpixel on right
+   ret   z                       ;; [4-2] if ZFLag, we have reach right screen boundary
 
-   ld    a,d                   ;; a = subpixel
-   or    a                     ;; check if left subpixel (so we reached a new octet)
-   jr    nz, sdr_checkSubpixel ;; No ?  Let's print it and move to another one
+   ld    a,d                     ;; [1] a = subpixel
+   or    a                       ;; [2] check if left subpixel (so we reached a new octet)
+   jr    nz, sdr_checkSubpixel   ;; [3-2] No ?  Let's print it and move to another one
 
-   ld    a,(new_color_full)    ;; a = new color full octet
-   ld    b,a                   ;; c = new color full octet
+   ld    a,(new_color_full)      ;; [4] a = new color full octet
+   ld    b,a                     ;; [1] c = new color full octet
 sdr_loopFullOctet:
-   ld    a,(old_color_full)    ;; a = old color full octet
-   cp    (hl)                  ;; check with screen octet
-   jr    nz,sdr_checkSubpixel  ;; if not full octet let's do it one subpixel by one subpixel
-   ld    (hl),b                ;; Set full octet to new color
-   ld    a,e                   ;; a = X OCtet
-   cp    #maxX                 ;; Compare with maxX (79)
-   jr    z,sdr_lastOctet       ;; we reached end of line
-   inc   hl                    ;; if not move to next adress
-   inc   e                     ;; e = X + 1
-   jp    sdr_loopFullOctet     ;; loop
-sdr_lastOctet::
-   ld    d,#0x03               ;; set subpixel to right one
-   ret                         ;; ZFlag is still set here
-sdr_checkSubpixel::
-   call  checkOldColor         ;; is subpixel of old color
-   jr    nz,sdr_lastSubpixel   ;; if old color draw it and continue
-   call  plotPixel             ;; chenge color of subpixel
-   jr    sdr_loopSubpixel      ;; continue
-sdr_lastSubpixel::
-   call  decreaseSubpixel      ;; if not, last subpixel was the last one
-	ret                         ;; return
-
-
-
-searchNewPoints::
+   ld    a,(old_color_full)      ;; [4] a = old color full octet
+   cp    (hl)                    ;; [2] check with screen octet
+   jr    nz,sdr_checkSubpixel    ;; [3-2] if not full octet let's do it one subpixel by one subpixel
+   ld    (hl),b                  ;; [2] Set full octet to new color
+   ld    a,e                     ;; [1] a = X OCtet
+   cp    #maxX                   ;; [2] Compare with maxX (79)
+   jr    z,sdr_lastOctet         ;; [3-2] we reached end of line
+   inc   hl                      ;; [2] if not move to next adress
+   inc   e                       ;; [1] e = X + 1
+   jp    sdr_loopFullOctet       ;; [3] loop
+sdr_lastOctet:
+   ld    d,#0x03                 ;; [2] set subpixel to right one
+   ret                           ;; [3] ZFlag is still set here
+sdr_checkSubpixel:
+   call  checkOldColor           ;; [5] is subpixel of old color
+   jr    nz,sdr_lastSubpixel     ;; [3-2] if old color draw it and continue
+   call  plotPixel               ;; [5] chenge color of subpixel
+   jr    sdr_loopSubpixel        ;; [3] continue
+sdr_lastSubpixel:
+   call  decreaseSubpixel        ;; [5] if not, last subpixel was the last one
+	ret                           ;; [3] return
+searchNewPoints:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; check and push points which are old_color (wait for end of old_color to add another one found)
 ;; and move to the right until end of previously draw Line 
    ;; Init
-   xor   a                      ;; a = 0
-   ld    (searchFlag),a         ;; reset search flag insertion - looking For old_color (jump over full new color)
+   xor   a                       ;; [2] a = 0
+   ld    (searchFlag),a          ;; [4] reset search flag insertion - looking For old_color (jump over full new color)
 
    ;; Alternate between searching old_color and jumping above old_color on current line
    ;; Stops when end of right drawn line reached
-snp_mainLoop::
-   ld    a,(searchFlag)
-   or    a
-   jr    nz,snp_searchEndOldColor
+snp_mainLoop:
+   ld    a,(searchFlag)          ;; [4] get current searchFlag
+   or    a                       ;; [2] check == 0
+   jr    nz,snp_searchEndOC      ;; [3-2] if !=0 we are looking for end of old_color
 
-;; searchOldColor
-   call  checkOldColor           ;; Do we have an old_color here?
-   jr    nz,snp_nextSearchSP     ;; no, move to next subpixel or end of line
+;; searching for old_color pixels
+   call  checkOldColor           ;; [5] Do we have an old_color here?
+   jr    nz,snp_nextSearchSP     ;; [3-2] no, move to next subpixel
    
-   call  pushPoint               ;; We have a hit, push it and switch flag 
-   or    a,#0x01                ;; a != 0
-   ld    (searchFlag),a         ;; flag != 0 means, search for first pixel which is not old_color (jump over old_color)
-   jr    snp_nextSearchSP
-snp_searchEndOldColor::
-   call  checkOldColor
-   jr    z,snp_nextSearchSP      ;; Still old color, wait for another color
-   xor   a                       ;; set a = 0
-   ld    (searchFlag),a          ;; Reset flag : search for old color again
-   ; and continue to next
-snp_nextSearchSP::
-   call  increaseSubpixel         ;; move to right one subpixel
-   ret   z                        ;; stop if already at end of screen
-   call  checkEndOfDrawnLine      ;; Check if end of draw line
-   ret   z                        ;; stop if increase has gone after drawn line
+   call  pushPoint               ;; [5] We have a hit, push it on stack and switch flag
+   or    a,#0x01                 ;; [2] a != 0
+   ld    (searchFlag),a          ;; [4] flag != 0 means, search for first pixel which is not old_color (jump over old_color)
+   jr    snp_nextSearchSP        ;; [3] move to next subpixel
+snp_searchEndOC:
+   call  checkOldColor           ;; [5] search for another color in pixel
+   jr    z,snp_nextSearchSP      ;; [3-2] Still old color, wait for another color
+   xor   a                       ;; [2] set a = 0
+   ld    (searchFlag),a          ;; [4] Reset flag : search for old color again
+                                 ;; continue to next subpixel
+snp_nextSearchSP:
+   call  increaseSubpixel        ;; [5] move to right one subpixel
+   ret   z                       ;; [4-2] stop if already at end of screen
+   call  checkEndOfDrawnLine     ;; [5] Check if end of draw line
+   ret   z                       ;; [4-2] stop if increase has gone after drawn line
+   ld    a,d                     ;; [1] a = subpixel
+   or    a                       ;; [2] check a == 0
+   jr    nz, snp_mainLoop        ;; [3-2] Not starting a new octet, let's loop on sub pixels
 
-   ld    a,d                      ;; a = subpixel
-   or    a                        ;; check a == 0
-   jr    nz, snp_mainLoop         ;; Not starting a new octet, let's continue
+   ld    a,(searchFlag)          ;; [4] check the searchFlag to set correct full_octet to test
+   or    a                       ;; [2]
+   jr    z,snp_useNewColor       ;; [3-2] if searching for old_color , we can skip new_color_full octets
 
-   ld    a,(searchFlag)
-   or    a
-   jr    z,snp_useNewColor
-
-   ld    a,(old_color_full)       ;; a = old color full octet
-   jr snp_setColorToJump
+   ld    a,(old_color_full)      ;; [4] a = old color full octet
+   jr snp_setColorToJump         ;; [3] continue with this color
 snp_useNewColor:
-   ld    a,(new_color_full)       ;; a = old color full octet
+   ld    a,(new_color_full)      ;; [4] a = new color full octet
 snp_setColorToJump:
-   ld    b,a                      ;; b = old color full octet
-snp_loopFullOctet::
-   ld    a,(cur_byte_offset)      ;; a = right X Offset
-   cp    e                        ;; compare wirth current X Offset
-   jr    z, snp_mainLoop          ;; We are on last octet (a == e), move slowly and check if last subpixel
-   ret   c                        ;; We move above last pixel (e > a), ret from there
-   ld    a,b                      ;; a = old color full octet
-   cp    (hl)                     ;; compare with screen octet
-   jr    nz,snp_mainLoop          ;; not equal so we move slowly
-   inc   e                        ;; increase X ofsset  (keep d = 0 left subpixel)
-   inc   hl                       ;; inc screen adress
-   jr    snp_loopFullOctet        ;; loop on full octets
-snp_checkLastPixel::
-   ;; call  decreaseSubpixel         ;; Better restart from previous
-   jr    snp_mainLoop          ;; in this case
+   ld    b,a                     ;; [1] b = color full octet to skip
+snp_loopFullOctet:
+   ld    a,(cur_byte_offset)     ;; [4] a = right X Offset
+   cp    e                       ;; [2] compare with current X Offset
+   ;; jr    z, snp_mainLoop      ;; We are on last octet (a == e), move slowly and check with subpixels
+   ret   c                       ;; [4-2] We move above last pixel (e > a), ret from there
+   ld    a,b                     ;; [1] a = color full octet to skip
+   cp    (hl)                    ;; [2] compare with screen octet
+   jr    nz,snp_mainLoop         ;; [3-2] not equal so we need to check pixels
+   inc   e                       ;; [1] increase X ofsset  (keep d = 0 left subpixel)
+   inc   hl                      ;; [2] inc screen adress
+   jr    snp_loopFullOctet       ;; [3] loop on full octets
 
-checkEndOfDrawnLine::            ;; Return ZFlag when last pixel is passed (still no ZFlag on last subpixel)
+checkEndOfDrawnLine:             ;; Return ZFlag when last pixel is passed (still no ZFlag on last subpixel)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ld    a,(cur_byte_offset)     ;; A = right X Offset
-   cp    e                       ;; compare actual X Offset with right X Offset
-   ret   c                       ;; if e > cur X, not on last octet
-   jr    nz,cel_resetZFlag       ;; if e < cur X, line is overpassed
-   ld    a,(cur_subpixel)        ;; here e == cur X so check subpixel, A = righ subpixel
-   cp    d                       ;; compare with actual subpixel, d must be > a to fire ZFlag
-   jr    nc,cel_resetZFlag       ;; d <= a , no flag
-   xor   a                       ;; force ZFLag ON
-   ret   nc                      ;; if d <= cur subPixel, ZFlag is set appropiately
-                                 ;; if d> cur subpuixel need to set ZFlag
+   ld    a,(cur_byte_offset)     ;; [4] A = right X Offset
+   cp    e                       ;; [2] compare actual X Offset with right X Offset
+   ret   c                       ;; [4-2] if e > cur X, not on last octet
+   jr    nz,cel_resetZFlag       ;; [3-2] if e < cur X, line is overpassed
+   ld    a,(cur_subpixel)        ;; [4] here e == cur X so check subpixel, A = righ subpixel
+   cp    d                       ;; [2] compare with actual subpixel, d must be > a to fire ZFlag
+   jr    nc,cel_resetZFlag       ;; [3-2] d <= a , no flag
+   xor   a                       ;; [2] force ZFLag ON
+   ret   nc                      ;; [4-2] if d <= cur subPixel, ZFlag is set appropiately with comparison
+                                 ;; if d> cur subpixel need to set ZFlag
 cel_resetZFlag:   
-   or   #0x01                    ;; force ZFlag to OFF
-   ret                           ;; 
+   or   #0x01                    ;; [2] force ZFlag to OFF
+   ret                           ;; [3]
 
-plotPixel::                            ;; Plot pixel D at (hl) in new_color
+plotPixel:                       ;; Plot pixel D at (hl) in new_color
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   push  de                            ;; Preserve DE
-   push  hl                            ;; Preserve HL = screen adress
-   ld    e,d                           ;; e = subpixel
-   ld    d,#0                          ;; de = subpixel offset 16 bits
-   ld    hl,#cpct_plotMasksTable_M1    ;; hl = masktable
-   add   hl,de                         ;; hl = masktable + subpixel offset
-   ld    a,(hl)                        ;; a = subpixel mask
-   ld    hl,#new_color                 ;; de = new color table
-   add   hl,de                         ;; hl = new color table + subpixel offset
-   ld    e,(hl)                        ;; e = new_color subpixel
-   pop   hl                            ;; retrieve screen adress
-   and   (hl)                          ;; a = subpixel reset of screen octet 
-   or    e                             ;; a = merge reset screen octet with new_color subpixel
-   ld    (hl),a                        ;; Set screen octet
-   pop   de                            ;; Retrieve DE
-   ret                                 ;; return
-computeAdress::                ;; Compute HL = VMemStart + c mod 7 * &800 + 80 * (c % 7) + E  - From cpct_getScreenPtr_asm
+   push  de                      ;; [4] Preserve DE
+   push  hl                      ;; [4] Preserve HL = screen adress
+   ld    e,d                     ;; [1] e = subpixel
+   ld    d,#0                    ;; [2] de = subpixel offset 16 bits
+   ld    hl,#cpct_plotMasksTable_M1 ;; [3] hl = masktable
+   add   hl,de                   ;; [3] hl = masktable + subpixel offset
+   ld    a,(hl)                  ;; [2] a = subpixel mask
+   ld    hl,#new_color           ;; [3] de = new color table
+   add   hl,de                   ;; [3] hl = new color table + subpixel offset
+   ld    e,(hl)                  ;; [2] e = new_color subpixel
+   pop   hl                      ;; [3] retrieve screen adress
+   and   (hl)                    ;; [2] a = subpixel reset of screen octet
+   or    e                       ;; [2] a = merge reset screen octet with new_color subpixel
+   ld    (hl),a                  ;; [2] Set screen octet
+   pop   de                      ;; [3] Retrieve DE
+   ret                           ;; [3] return
+computeAdress:                   ;; Compute HL = VMemStart + c mod 7 * &800 + 80 * (c % 7) + E  - From cpct_getScreenPtr_asm
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   push  bc                   ;; Preserve BC
-   ld    a, c                 ;; [1] rA = Y-Coordinate
-   and   #0x07                ;; [2] /
-   ld    h, a                 ;; [1] \ rH = Y % 8      ;; << rH contains Line number [0-7] inside character Row
-   xor   c                    ;; [1] / rA = ( rB and #0x07 ) xor rB  =  rB and #0xF8
-   ld    l, a                 ;; [1] \ rL = 8*int(Y/8) ;; << L contains Screen Character Row multiplied by 8
-   rrca                       ;; [1] / 
-   rrca                       ;; [1] \ rA' = rA / 4 = 2*int(Y/8)
-   add   a, l                 ;; [1] /
-   ld    l, a                 ;; [1] \ rL = rL + rA' = 8*int(Y/8) + 2*int(Y/8) = 10*int(Y/8) 
-   add   hl, hl               ;; [3] /
-   add   hl, hl               ;; [3] |
-   add   hl, hl               ;; [3] \ rHL' = 8*rHL = 2048*L + 80*R 
-   ld    b,#0                 ;; Reset b
-   ld    c,e                  ;; c = byte offset
-   add   hl, bc               ;; [3] rHL' = rHL + x octet
-   ld    bc,(screen_start)    ;; BC = VMEM start
-   add   hl, bc               ;; [3] rHL' = rHL + screen_start
-   pop   bc                   ;; retrieve BC
-   ret                        ;; return
+   push  bc                      ;; [4] Preserve BC
+   ld    a, c                    ;; [1] rA = Y-Coordinate
+   and   #0x07                   ;; [2] /
+   ld    h, a                    ;; [1] \ rH = Y % 8      ;; << rH contains Line number [0-7] inside character Row
+   xor   c                       ;; [1] / rA = ( rB and #0x07 ) xor rB  =  rB and #0xF8
+   ld    l, a                    ;; [1] \ rL = 8*int(Y/8) ;; << L contains Screen Character Row multiplied by 8
+   rrca                          ;; [1] /
+   rrca                          ;; [1] \ rA' = rA / 4 = 2*int(Y/8)
+   add   a, l                    ;; [1] /
+   ld    l, a                    ;; [1] \ rL = rL + rA' = 8*int(Y/8) + 2*int(Y/8) = 10*int(Y/8)
+   add   hl, hl                  ;; [3] /
+   add   hl, hl                  ;; [3] |
+   add   hl, hl                  ;; [3] \ rHL' = 8*rHL = 2048*L + 80*R
+   ld    b,#0                    ;; [2] Reset b
+   ld    c,e                     ;; [1] c = byte offset
+   add   hl, bc                  ;; [3] rHL' = rHL + x octet
+   ld    bc,(screen_start)       ;; [6] BC = VMEM start
+   add   hl, bc                  ;; [3] rHL' = rHL + screen_start
+   pop   bc                      ;; [3] retrieve BC
+   ret                           ;; [3] return
 
-checkOldColor::               ;; Returns ZFlag ON if color of the pixel at (HL),D is an old_color
-   ld    b,(hl)               ;; b = screen octet
-   ld    a,(old_color_full)   ;; A = full octet old color 
-   xor   b                    ;; check if A == B
-   ret   z                    ;; If full octet is old_color ret ZFlag
-   push  hl                   ;; save screen adress
-   push  de                   ;; save de
-   ld    e,d                  ;; e = subpixel
-   ld    d,#0                 ;; de = subpixel 16 bit
-   ld    hl,#cpct_plotColorTable_M1+12 ;; Point to pixel table
-   add   hl,de                ;; hl = subpixel mask adress in pixel table
-   ld    a,(hl)               ;; get mask for the subpixel
-   and   b                    ;; a = get the subpixel value of screen octet
-   ld    hl,#old_color        ;; hl = old color table
-   add   hl,de                ;; hl = old color subpixel adress
-   xor   (hl)                 ;; a = actual subpixel xor oldcolor pixel- ZFlag is set if A == (HL) 
-   pop   de                   ;; retrieve de
-   pop   hl                   ;; retrieve screen adress
-   ret                        ;; Z Flag is true if color found in pixel
-pushPoint::                    ;; Push point DE and C into stack - FZ not set : OK - FZ set : no more room
+checkOldColor:                   ;; Returns ZFlag ON if color of the pixel at (HL),D is an old_color
+   ld    b,(hl)                  ;; [2] b = screen octet
+   ld    a,(old_color_full)      ;; [4] A = full octet old color
+   xor   b                       ;; [2] check if A == B
+   ret   z                       ;; [4-2] If full octet is old_color ret ZFlag
+   push  hl                      ;; [4] save screen adress
+   push  de                      ;; [4] save de
+   ld    e,d                     ;; [1] e = subpixel
+   ld    d,#0                    ;; [2] de = subpixel 16 bit
+   ld    hl,#cpct_plotColorTable_M1+12 ;; [3] Point to pixel table
+   add   hl,de                   ;; [3] hl = subpixel mask adress in pixel table
+   ld    a,(hl)                  ;; [2] get mask for the subpixel
+   and   b                       ;; [2] a = get the subpixel value of screen octet
+   ld    hl,#old_color           ;; [3] hl = old color table
+   add   hl,de                   ;; [3] hl = old color subpixel adress
+   xor   (hl)                    ;; [2] a = actual subpixel xor oldcolor pixel- ZFlag is set if A == (HL)
+   pop   de                      ;; [3] retrieve de
+   pop   hl                      ;; [3] retrieve screen adress
+   ret                           ;; [3] Z Flag is true if color found in pixel
+pushPoint:                       ;; Push point DE and C into stack - FZ not set : OK - FZ set : no more room
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ld    a,(stack_idx)        ;; Get current stack index
-   cp    #STACK_SIZE          ;; Check if stack is full
-   ret   z                    ;; Return if full
+   ld    a,(stack_idx)           ;; [4] Get current stack index
+   cp    #STACK_SIZE             ;; [2] Check if stack is full
+   ret   z                       ;; [4-2] Return if full
 
-   inc   a                    ;; a = stack_idx + 1
-   ld    (stack_idx),a        ;; store stack_idx
+   inc   a                       ;; [1] a = stack_idx + 1
+   ld    (stack_idx),a           ;; [4] store stack_idx
 
-   push  hl
-   ld    hl,(stack_adress)    ;; HL = Stack Adress
+   push  hl                      ;; [4] preserve hl
+   ld    hl,(stack_adress)       ;; [5] HL = Stack Adress
 
-   ld    (hl),e               ;; Save X byte offset
-   inc   hl                   ;; Move down   
-   ld    (hl),d               ;; Save subpixel
-   inc   hl                   ;; Move down   
-   ld    (hl),c               ;; Save Y Coordinates
-   inc   hl                   ;; Move down   
-	ld    (stack_adress),hl    ;; Save new stack address
-   pop   hl
+   ld    (hl),e                  ;; [2] Save X byte offset
+   inc   hl                      ;; [2] Move down
+   ld    (hl),d                  ;; [2] Save subpixel
+   inc   hl                      ;; [2] Move down
+   ld    (hl),c                  ;; [2] Save Y Coordinates
+   inc   hl                      ;; [2] Move down
+	ld    (stack_adress),hl       ;; [5] Save new stack address
+   pop   hl                      ;; [3] retrieve hl
 
-   ret                        ;; Going back
+   ret                           ;; [3] Going back
 
-popPoint::                     ;; Pop point into DE and C from stack - FZ not set : OK - FZ set : empty stack
+popPoint:                        ;; Pop point into DE and C from stack - No need to preserve HL (recomputed) - FZ not set : OK - FZ set : empty stack
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ld    a,(stack_idx)        ;; Get current stack index
-   or    a                    ;; Check if stack is empty
-   ret   z                    ;; If not empty, continue
+   ld    a,(stack_idx)           ;; [4] Get current stack index
+   or    a                       ;; [2] Check if stack is empty
+   ret   z                       ;; [4-2] If not empty, continue
 
-   dec   a                    ;; a = stck_idx - 1
-   ld    (stack_idx),a        ;; store stack_idx
+   dec   a                       ;; [1] a = stck_idx - 1
+   ld    (stack_idx),a           ;; [4] store stack_idx
 
-	ld    hl,(stack_adress)    ;; Points to last stack adress - no need to preserve, will be recomputed
-   dec   hl                   ;; Move up
-   ld    c,(hl)               ;; Get Y coordinates
-   dec   hl                   ;; Move up
-   ld    d,(hl)               ;; Get subpixel
-   dec   hl                   ;; Move up   
-   ld    e,(hl)               ;; Get X byte offset
-	ld    (stack_adress),hl    ;; Save new stack address
-   or    #0x01                ;; reset Z flag
+	ld    hl,(stack_adress)       ;; [5] Points to last stack adress - no need to preserve, will be recomputed
+   dec   hl                      ;; [2] Move up
+   ld    c,(hl)                  ;; [2] Get Y coordinates
+   dec   hl                      ;; [2] Move up
+   ld    d,(hl)                  ;; [2] Get subpixel
+   dec   hl                      ;; [2] Move up
+   ld    e,(hl)                  ;; [2] Get X byte offset
+	ld    (stack_adress),hl       ;; [5] Save new stack address
+   or    #0x01                   ;; [2] reset Z flag
 
-   ret
+   ret                           ;; [3] return
 
-storeColor:                   ;; Store color subpixels into HL - a = color of subpixel 
+storeColor:                      ;; Store color subpixels into HL - a = color of subpixel
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ld    b,a                  ;; b = color for sub pixel 0
-   ld   (hl),b                ;; Save color for sub pixel 0
-   inc   hl                   ;; next octet
-   rrc   b                    ;; Rotate B right to get color for sub pixel 1
-   or    b                    ;; A = A + color for sub pixel 1      
-   ld   (hl),b                ;; Save color for sub pixel 1
-   inc   hl                   ;; next octet
-   rrc   b                    ;; Rotate B right to get color for sub pixel 2
-   or    b                    ;; A = A + color for sub pixel 2      
-   ld   (hl),b                ;; Save color for sub pixel 2
-   inc   hl                   ;; next octet
-   rrc   b                    ;; Rotate B right to get color for sub pixel 3
-   or    b                    ;; A = A + color for sub pixel 3      
-   ld   (hl),b                ;; Save color for sub pixel 3
-   inc   hl                   ;; next octet (Full_octet)
-   ld   (hl),a                ;; Save color full octet
-   ret                        ;; A contains full octet color
+   ld    b,a                     ;; [1] b = color for sub pixel 0
+   ld   (hl),b                   ;; [2] Save color for sub pixel 0
+   inc   hl                      ;; [2] next octet
+   rrc   b                       ;; [2] Rotate B right to get color for sub pixel 1
+   or    b                       ;; [2] A = A + color for sub pixel 1
+   ld   (hl),b                   ;; [2] Save color for sub pixel 1
+   inc   hl                      ;; [2] next octet
+   rrc   b                       ;; [2] Rotate B right to get color for sub pixel 2
+   or    b                       ;; [2] A = A + color for sub pixel 2
+   ld   (hl),b                   ;; [2] Save color for sub pixel 2
+   inc   hl                      ;; [2] next octet
+   rrc   b                       ;; [2] Rotate B right to get color for sub pixel 3
+   or    b                       ;; [2] A = A + color for sub pixel 3
+   ld   (hl),b                   ;; [2] Save color for sub pixel 3
+   inc   hl                      ;; [2] next octet (Full_octet)
+   ld   (hl),a                   ;; [2] Save color full octet
+   ret                           ;; [3] return and A contains full octet color
 
-changeYUp::
+changeYUp:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ld    a,c                  ;; a = c = Y value
-   or    a                    ;; Check if 0
-   ret   z                    ;; Top of screen reached, return ZFlag ON
-   dec   c
-   call  computeAdress        ;; Compute new adress
-   or    #0x01                ;; make sure ZFlag is OFF because of previous call
-   ret
+   ld    a,c                     ;; [1] a = c = Y value
+   or    a                       ;; [2] Check if 0
+   ret   z                       ;; [4-2] Top of screen reached, return ZFlag ON
+   dec   c                       ;; [1] c = Y - 1
+   call  computeAdress           ;; [5] Compute new adress
+   or    #0x01                   ;; [2] make sure ZFlag is OFF because of previous call
+   ret                           ;; [3] return
 
-changeYDown::
+changeYDown:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ld    a,c                  ;; a = c = Y value
-   cp    #maxY                ;; 
-   ret   z                    ;; Top of screen reached, return ZFlag ON
-   inc   c
-   call  computeAdress        ;; Compute new adress
-   or    #0x01                ;; make sure ZFlag is OFF because of previous call
-   ret
+   ld    a,c                     ;; [1] a = c = Y value
+   cp    #maxY                   ;; [2] Compare with max screen
+   ret   z                       ;; [4-2] Top of screen reached, return ZFlag ON
+   inc   c                       ;; [1] c = Y + 1
+   call  computeAdress           ;; [5] Compute new adress
+   or    #0x01                   ;; [2] make sure ZFlag is OFF because of previous call
+   ret                           ;; [3] return
 
-decreaseSubpixel::
+decreaseSubpixel:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ld    a,d                           ;; a = subpixel
-   or    a                             ;; check a == 0
-   jr    z,dsp_changeXOffset           ;; Subpixel == 0, move to previous octet
-   dec   d                             ;; decrease subpixel
-   or    a                             ;; To reset Z Flag if d == 0
-   ret                                 ;;  return
+   ld    a,d                     ;; [1] a = subpixel
+   or    a                       ;; [2] check a == 0
+   jr    z,dsp_changeXOffset     ;; [3-2] Subpixel == 0, move to previous octet
+   dec   d                       ;; [1] decrease subpixel
+   or    a                       ;; [2] To reset Z Flag if d == 0
+   ret                           ;; [3] return
 dsp_changeXOffset:
-   ld    a,e                           ;; a = X octet in line
-   or    a                             ;; Check a == 0
-   ret   z                             ;; Z flag is set : cannot move before sub pixel 0 of X-Offset 0
-   ld    d,#0x03                       ;; d = last subpixel
-   dec   hl                            ;; decrease screen adress
-   dec   e                             ;; decrease X Octet
-   or    a                             ;; to reset ZFlag if e = 0
-   ret                                 ;; return
+   ld    a,e                     ;; [1] a = X octet in line
+   or    a                       ;; [2] Check a == 0
+   ret   z                       ;; [4-2] Z flag is set : cannot move before sub pixel 0 of X-Offset 0
+   ld    d,#0x03                 ;; [2] d = last subpixel
+   dec   hl                      ;; [2] decrease screen adress
+   dec   e                       ;; [1] decrease X Octet
+   or    a                       ;; [2] to reset ZFlag if e = 0
+   ret                           ;; [3] return
 
-increaseSubpixel::
+increaseSubpixel:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ld    a,#0x03                       ;; a = 3
-   cp    d                             ;; Compare subpixel with 3
-   jr    z,isp_changeXOffset           ;; subpixel == 3, move to next octet
-   inc   d                             ;; increase subpixel (ZFlag cannot be set)
-   ret                                 ;; return 
+   ld    a,#0x03                 ;; [2] a = 3
+   cp    d                       ;; [2] Compare subpixel with 3
+   jr    z,isp_changeXOffset     ;; [3-2] subpixel == 3, move to next octet
+   inc   d                       ;; [1] increase subpixel (ZFlag cannot be set)
+   ret                           ;; [3] return
 isp_changeXOffset:
-   ld    a,e                           ;; a = X Octet in line   
-   cp    #maxX                          ;; compare with end of line
-   ret   z                             ;; Z flag is set : cannot move after sub pixel 3 of X-Offset maxX
-   ld    d,#0x00                       ;; d = left subpixel
-   inc   hl                            ;; increase screen adress
-   inc   e                             ;; increase X (ZFlag cannot be set)
-   ret                                 ;; return
+   ld    a,e                     ;; [1] a = X Octet in line
+   cp    #maxX                   ;; [2] compare with end of line
+   ret   z                       ;; [4-2] Z flag is set : cannot move after sub pixel 3 of X-Offset maxX
+   ld    d,#0x00                 ;; [2] d = left subpixel
+   inc   hl                      ;; [2] increase screen adress
+   inc   e                       ;; [1] increase X (ZFlag cannot be set)
+   ret                           ;; [3] return
