@@ -27,27 +27,27 @@
 ;;    Compute new and old_color subpixels and full octet, exit if new color == old color
 ;;    Push X Offset, subpixel and Y in point stack 
 ;; Main loop:
-;;     pop a point from stack - Exit is stack was empty (no more thigs to do)
-;;     drawOnLeft to find left most pixel which is still old_color, try to use full_cotet if possible. Stop at begining of screen if needed.
-;;     drawOnRight to find right most pixel which is still old_color, try to use full_cotet if possible. Stop at end of screen if needed.
-;;     get left side of line on above line (decreasing Y)   (do it after with below line (increase y)
+;;     pop a point from stack - Exit is stack was empty (no more things to do)
+;;     drawOnLeft to find left most pixel which is still old_color, try to use full_octet if possible. Stop at begining of screen if needed.
+;;     drawOnRight to find right most pixel which is still old_color, try to use full_octet if possible. Stop at end of screen if needed.
+;;     get left side of line on above line (decreasing Y)   (do it again after with below line (increase y)
 ;;     initSubLoop
-;;          set a search flag to 'old_color '(other value is 'not old_color')
+;;          set a search flag to 'search old_color'
 ;;     subLoop
-;;          if searchFlag is search For Old Color
+;;          if searchFlag is 'search Old Color'
 ;;             check if pixel is old color
 ;;             if yes
-;;                pushcurrent  point into stack and set search flag to 'not old color'
-;;          else  (search fo rnot old color)
+;;                pushcurrent  point into stack and set search flag to 'search not old color'
+;;          else  (search for 'not old color')
 ;;             check if pixel is old color
-;;             if no
-;;                set search flag to 'old color'
+;;             if not
+;;                set search flag to 'search old color'
 ;;          endif
-;;          move to next pixel on the right, check if end of drawn line reached to exit subLoop
+;;          move to next pixel on the right, check if right end of previous drawnn line reached to exit subLoop
 ;;          try to jump over full octets
-;;             old color if 'not old color' (will slow back to pixel checks )
-;;             new_color if 'old_color'  (only case we are sure)
-;;             fall back to pixel checking in doubt, exit subLoop if end of drawn line is reached
+;;             old color if 'not old color' (will slow back to pixel checks if not found)
+;;             new_color if 'old_color'  (only case we have values ready, else switch back to pixel check)
+;;             fall back to pixel checking in doubt, exit subLoop if right end of drawn line is reached or passed
 
 .globl cpct_plotColorTable_M1
 .globl cpct_plotMasksTable_M1
@@ -55,16 +55,15 @@
 
 ;; Special values 
 STACK_SIZE = 30                  ;; Max number of elements in points stack
-maxX       = 79                  ;; X byte limit
-maxY       = 199                 ;; Y limit
 
 ;;-------------------------------------------------------------------------------
 ;; DATA SECTION
 ;;-------------------------------------------------------------------------------
 .area _DATA
-screen_start:     .dw 0          ;; Screen start from inputs
+screen_start:     .dw 0          ;; Screen start from input
 
 ;; Keep cur values ordered like this for easy incremental access
+;; Byte and subpixel maybe stored as a 16bit register so do not swap order
 cur_byte_offset:  .db 0          ;; Current byte offset
 cur_subpixel:     .db 0          ;; Current subpixel
 cur_y_val:        .db 0          ;; Current y coordinate
@@ -273,7 +272,7 @@ sdr_loopFullOctet:
    jr    nz,sdr_checkSubpixel    ;; [3-2] if not full octet let's do it one subpixel by one subpixel
    ld    (hl),b                  ;; [2] Set full octet to new color
    ld    a,e                     ;; [1] a = X OCtet
-   cp    #maxX                   ;; [2] Compare with maxX (79)
+   cp    #screenNbOctet          ;; [2] Compare with screen size (79)
    jr    z,sdr_lastOctet         ;; [3-2] we reached end of line
    inc   hl                      ;; [2] if not move to next adress
    inc   e                       ;; [1] e = X + 1
@@ -502,7 +501,7 @@ changeYUp:
 changeYDown:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ld    a,c                     ;; [1] a = c = Y value
-   cp    #maxY                   ;; [2] Compare with max screen
+   cp    #YMax                   ;; [2] Compare with max screen height
    ret   z                       ;; [4-2] Top of screen reached, return ZFlag ON
    inc   c                       ;; [1] c = Y + 1
    call  computeAdress           ;; [5] Compute new adress
@@ -536,8 +535,8 @@ increaseSubpixel:
    ret                           ;; [3] return
 isp_changeXOffset:
    ld    a,e                     ;; [1] a = X Octet in line
-   cp    #maxX                   ;; [2] compare with end of line
-   ret   z                       ;; [4-2] Z flag is set : cannot move after sub pixel 3 of X-Offset maxX
+   cp    #screenNbOctet          ;; [2] compare with end of line
+   ret   z                       ;; [4-2] Z flag is set : cannot move after sub pixel 3 of last X-Offset
    ld    d,#0x00                 ;; [2] d = left subpixel
    inc   hl                      ;; [2] increase screen adress
    inc   e                       ;; [1] increase X (ZFlag cannot be set)

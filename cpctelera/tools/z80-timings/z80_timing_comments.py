@@ -82,6 +82,8 @@ def template_to_regex(template: str, substitution_map: Dict[str, List[str]]) -> 
 
     escaped = escaped.replace(r"\ ", r"\s+")
     escaped = escaped.replace(r"\,", r"\s*,\s*")
+    escaped = escaped.replace(r"\+", r"\s*\+\s*")
+    escaped = escaped.replace(r"\-", r"\s*\-\s*")
     return r"^" + escaped + r"$"
 
 

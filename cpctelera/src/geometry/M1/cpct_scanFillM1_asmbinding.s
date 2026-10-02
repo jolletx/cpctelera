@@ -18,6 +18,9 @@
 ;;-------------------------------------------------------------------------------
 .module cpct_geometry
 
+;; M1 screen values
+.include \../cpct_geomConstants.h.s\
+
 ;;
 ;; ASM bindings for <cpct_scanFillM1>
 ;;
