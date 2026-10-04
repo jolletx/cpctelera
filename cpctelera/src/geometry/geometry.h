@@ -38,6 +38,6 @@ extern void cpct_drawPlotM1    (u8* screen_start, u16 x, u8 y, u8 color) __z88dk
 extern void cpct_drawCircleM1  (u8* vmem, u16 centerx, u16 centery, u8 radius, u8 color) __z88dk_callee;
 extern u8   cpct_getColorAtM1  (u8* vmem, u16 x, u16 y) __z88dk_callee;
 extern void cpct_scanFillM1    (u8* vmem, u16 x, u8 y, u8 newColor) __z88dk_callee;
-extern u8   cpct_clampLineM1    (i16 ioPt1 [2], i16 ioPt2[2]);
+extern u8   cpct_clampLineM1   (i16 *ioPt1, i16 *ioPt2);
 
 #endif
