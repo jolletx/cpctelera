@@ -88,23 +88,23 @@ computeXMin::
    ld    (hl),d                  ;; [2] Put computed MSB value in MSB
 
 checkXMaxAlgo::
-    ld    hl,(pt2Adress)         ;; [5] hl = pt2
-    call  checkXMax              ;; [5] Check if pt2.X > XMax
-    ld    hl,(pt1Adress)         ;; [5] hl = pt1
-    jr    z,pt2LEXMax            ;; [2/3] if ZF, pt2.x <= XMax
-    call  checkXMax              ;; [5] pt1.X > XMax
-    jp    nz,noDrawLine          ;; [3] Both pt1 and pt2 are outside of screen : no draw and exit
+   ld    hl,(pt2Adress)          ;; [5] hl = pt2
+   call  checkXMax               ;; [5] Check if pt2.X > XMax
+   ld    hl,(pt1Adress)          ;; [5] hl = pt1
+   jr    z,pt2LEXMax             ;; [2/3] if ZF, pt2.x <= XMax
+   call  checkXMax               ;; [5] pt1.X > XMax
+   jp    nz,noDrawLine           ;; [3] Both pt1 and pt2 are outside of screen : no draw and exit
    ;; pt1 is inside but not pt2 - Need to project pt1-pt2 on X=XMax and modify pt2
-    push  iy                     ;; [5] push pt2 adress
-    jr    computeXMax            ;; [3] Move to computation
+   push  iy                      ;; [5] push pt2 adress
+   jr    computeXMax             ;; [3] Move to computation
 pt2LEXMax::                      ;; pt2 in bound of XMax - hl = pt1
-    call  checkXMax              ;; [5] pt1.X > XMax
-    jr    z,checkYMinAlgo        ;; [2/3] Nothing to do move to next check
+   call  checkXMax               ;; [5] pt1.X > XMax
+   jr    z,checkYMinAlgo         ;; [2/3] Nothing to do move to next check
    ;; pt2 is inside but not pt1 - Need to project pt1-pt2 on X=XMax and modify pt1
-    push  ix                     ;; [5] push pt1 adress
+   push  ix                      ;; [5] push pt1 adress
 computeXMax::
-    ld    bc,#XMaxM1             ;; [3] prepare intersect input with XMax
-    call  computeXIntersect      ;; [5] launch computation on X intersection of pt1/pt2 with bc, result in hl
+   ld    bc,#XMaxM1              ;; [3] prepare intersect input with XMax
+   call  computeXIntersect       ;; [5] launch computation on X intersection of pt1/pt2 with bc, result in hl
    pop   de                      ;; [3] retrieve adress of pt to modify
    ex    de,hl                   ;; [1] hl = adress of pt, de = value to put on Y
    ld    (hl),#XMaxM1LSB         ;; [3] put XMax LSB in pt.X
@@ -148,14 +148,14 @@ checkYMaxAlgo::
    ld    hl,(pt2Adress)          ;; [5] hl = pt2
    call  checkYMax               ;; [5] Check if pt2.Y > YMax
    ld    hl,(pt1Adress)          ;; [5] hl = pt1
-   jr    z,pt2GEYMax             ;; [2/3] if ZF, pt2.Y <= YMax
+   jr    z,pt2LEYMax             ;; [2/3] if ZF, pt2.Y <= YMax
 
    call  checkYMax               ;; [5] pt1.Y > YMax
    jr    nz,noDrawLine           ;; [2/3] Both pt1 and pt2 are outside of screen : no draw and exit
    ;; pt1 is inside but not pt2 - Need to project pt1-pt2 on Y=YMax and modify pt2
    push  iy                      ;; [5] push pt2 adress
    jr    computeYMax             ;; [3] move to computation
-pt2GEYMax::                      ;; pt2 in bound of YMax
+pt2LEYMax::                      ;; pt2 in bound of YMax
    call  checkYMax               ;; [5] pt1.Y > YMax
    jr    z,drawLine              ;; [2/3] Nothing to do move to end of checks
    ;; pt2 is inside but not pt1 - Need to project pt1-pt2 on Y=YMax and modify pt1
@@ -181,13 +181,13 @@ endClamping::
    pop   iy                      ;; [4] Retrieve IX
    pop   ix                      ;; [4] Retrieve IY
    ret                           ;; [3] return
-resetZFlagAndReturn::
-; Small helper to reset ZFlag and return
-   xor   a                       ;; [2] a = 0 and reset ZFlag
-   ret                           ;; [3] return
 setZFlagAndReturn::
 ; Small helper to set ZFlag and return
-   or   a,#0x01                  ;; [2] a = 1 and set ZFlag
+   xor   a                       ;; [2] a = 0 and set ZFlag = 1
+   ret                           ;; [3] return
+resetZFlagAndReturn::
+; Small helper to reset ZFlag and return
+   or   a,#0x01                  ;; [2] a = 1 and reset ZFlag = 0
    ret                           ;; [3] return
 checkXMin::
 ;; Set Z Flag if X >= XMin
@@ -201,12 +201,12 @@ checkXMax::
    or    a                       ;; [2] check 0
    ret   z                       ;; [2/4] no need to check more X < XMax and Z = 1
    dec   a                       ;; [1] check MSB-X with 1
-   jr    nz,resetZFlagAndReturn  ;; [2/3] MSB-X != 1, so X > XMax, set carry and return
+   jr    nz,resetZFlagAndReturn  ;; [2/3] MSB-X != 1, so X > XMax, reset ZF and return
    dec   hl                      ;; [2] go to LSB of X
    ld    a,(hl)                  ;; [2] MSB-X == 1, let's continue,  A = LSB-X
    cp    #XMaxM1LSB              ;; [2] Compare with XMaxLSB
-   jr    nc,setZFlagAndReturn    ;; [2/3] LSB-X <= XMaxLSB, so everything is fine, return
-   jr    resetZFlagAndReturn     ;; [3] LSB-X > XMaxLSB : reset ZF and return
+   jr    nc,resetZFlagAndReturn  ;; [2/3] LSB-X > XMaxLSB, so reset ZF and return
+   jr    setZFlagAndReturn       ;; [3] LSB-X <= XMaxLSB : set ZF and return
 
 checkYMin::
 ;; Set Z Flag if Y >= YMin
@@ -223,12 +223,12 @@ checkYMax::
    inc   hl                      ;; [2] go to MSB of Y
    ld    a,(hl)                  ;; [2] A = MSB-Y
    or    a                       ;; [2] check 0
-   jr    nz,resetZFlagAndReturn  ;; [2/3] no need to check more Y < YMax so return
+   jr    nz,resetZFlagAndReturn  ;; [2/3] no need to check more Y > YMax so reset flag and return
    dec   hl                      ;; [2] go to LSB of Y
    ld    a,(hl)                  ;; [2] A = LSB-Y
    cp    #YMax                   ;; [2] Compare with YMax
-   jr    nc,setZFlagAndReturn    ;; [2/3] LSB-Y <= YMax, so everything is fine, reset ZFlag and return
-   jr    resetZFlagAndReturn     ;; [3] LSB-Y > YMax,reset Z Flag and return
+   jr    nc,resetZFlagAndReturn  ;; [2/3] LSB-Y > YMax, so reset ZF and return
+   jr    setZFlagAndReturn       ;; [3] LSB-Y <= YMax : set ZF and return
 
 computeXIntersect::
 ;; Compute the intersection of the line defined by x=(ix),y=(iy) with the vertical line defined by X = bc
