@@ -17,37 +17,77 @@
 ;;  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;-------------------------------------------------------------------------------
 
-;; Algorythm: Scanline Fill
-;; Starting from a point, it will fill the area with the color specified in B register.
-;; It will stop when it finds a pixel with a different color than the one found in X,Y
-
-;; COMMENTS
-;; Init algo: 
-;;    get screen adress from X,Y, compute X Offset and subpixel, get old color on X,Y
-;;    Compute new and old_color subpixels and full octet, exit if new color == old color
-;;    Push X Offset, subpixel and Y in point stack 
-;; Main loop:
-;;     pop a point from stack - Exit is stack was empty (no more things to do)
-;;     drawOnLeft to find left most pixel which is still old_color, try to use full_octet if possible. Stop at begining of screen if needed.
-;;     drawOnRight to find right most pixel which is still old_color, try to use full_octet if possible. Stop at end of screen if needed.
-;;     get left side of line on above line (decreasing Y)   (do it again after with below line (increase y)
-;;     initSubLoop
-;;          set a search flag to 'search old_color'
-;;     subLoop
-;;          if searchFlag is 'search Old Color'
-;;             check if pixel is old color
-;;             if yes
-;;                pushcurrent  point into stack and set search flag to 'search not old color'
-;;          else  (search for 'not old color')
-;;             check if pixel is old color
-;;             if not
-;;                set search flag to 'search old color'
-;;          endif
-;;          move to next pixel on the right, check if right end of previous drawnn line reached to exit subLoop
-;;          try to jump over full octets
-;;             old color if 'not old color' (will slow back to pixel checks if not found)
-;;             new_color if 'old_color'  (only case we have values ready, else switch back to pixel check)
-;;             fall back to pixel checking in doubt, exit subLoop if right end of drawn line is reached or passed
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Function: cpct_scanFillM1
+;;
+;;    Fills an area defined by a point and its actual color with a new color in Mode 1 (320x200, 4 colors)
+;;
+;; Algorithm & Details:
+;;    Scanline Fill, starting from a point, it fills the area with the color specified.
+;;    It will stop when it finds a pixel with a different color than the one found initialy
+;;
+;; C Definition:
+;;    void cpct_scanFillM1 (u8* vmem, u16 x, u8 y, u8 newColor) __z88dk_callee;
+;;
+;; Input Parameters:
+;;    (2B HL)  vmem       - Base VRAM memory address (typically 0xC000)
+;;    (2B DE)  x          -  X coordinate (0-319 no checks)
+;;    (1B  C)  y          -  Y coordinate (0-199 no checks)
+;;    (1B  B)  newColor   -  New color to use (0-3)
+;;
+;;
+;; Assembly call:
+;;    > call cpct_scanFillM1_asm
+;;
+;; Destroyed Register values:
+;;    AF, BC, DE, HL
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Algorithm comment
+;;    Init algo: 
+;;       get screen adress from X,Y, compute X Offset and subpixel, get old color on X,Y
+;;       Compute new and old_color subpixels and full octet, exit if new color == old color
+;;       Push X Offset, subpixel and Y in point stack 
+;;    Main loop:
+;;        pop a point from stack - Exit is stack was empty (no more things to do)
+;;        drawOnLeft to find left most pixel which is still old_color, try to use full_octet if possible. Stop at begining of screen if needed.
+;;        drawOnRight to find right most pixel which is still old_color, try to use full_octet if possible. Stop at end of screen if needed.
+;;        get left side of line on above line (decreasing Y)   (do it again after with below line (increase y)
+;;        initSubLoop
+;;             set a search flag to 'search old_color'
+;;        subLoop
+;;             if searchFlag is 'search Old Color'
+;;                check if pixel is old color
+;;                if yes
+;;                   pushcurrent  point into stack and set search flag to 'search not old color'
+;;             else  (search for 'not old color')
+;;                check if pixel is old color
+;;                if not
+;;                   set search flag to 'search old color'
+;;             endif
+;;             move to next pixel on the right, check if right end of previous drawnn line reached to exit subLoop
+;;             try to jump over full octets
+;;                old color if 'not old color' (will slow back to pixel checks if not found)
+;;                new_color if 'old_color'  (only case we have values ready, else switch back to pixel check)
+;;                fall back to pixel checking in doubt, exit subLoop if right end of drawn line is reached or passed
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (start code)
+;; Required memory:
+;;    XXX bytes core routine  + 115 bytes data + 3 binding overhead
+;;
+;; Time Measures (+10 binding overhead):
+;;    Case                                      | microSecs (us) | CPU Cycles
+;;   ---------------------------------------------------------------------------------
+;;    (10,20),(30,40)     in  (0 intersect)     | XXX            | XXX
+;;    (-10,-20),(330,240) in  (4 intersect)     | XXX            | XXX
+;;    (-10,20),(-30,40)   out (0 intersect)     | XXX            | XXX
+;;    (-10,-20),(30,-40)  out (1 intersect)     | XXX            | XXX
+;;   ---------------------------------------------------------------------------------
+;; (end code)
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 .globl cpct_plotColorTable_M1
 .globl cpct_plotMasksTable_M1

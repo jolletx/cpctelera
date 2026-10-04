@@ -18,14 +18,8 @@
 ;;-------------------------------------------------------------------------------
 .module cpct_geometry
 
-;; M1 screen values
 .include \../cpct_geomConstants.h.s\
 
-;;
-;; ASM bindings for <cpct_scanFillM1>
-;;
-;;  16 microSecs, 4 bytes
-;;
 cpct_scanFillM1_asm::
 
 .include  /cpct_scanFillM1.asm/

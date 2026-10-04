@@ -18,25 +18,6 @@
 ;;-------------------------------------------------------------------------------
 .module cpct_geometry
 
-.globl cpct_getColorAtM1_asm
-
-;;
-;; C bindings for <cpct_geometryPlotM1>
-;; extern u8   cpct_getColorAtM1         (u8* vmem, u16 x, u8 y) __z88dk_callee;
-;;   vmem        - Base VRAM memory address (typically 0xC000)
-;;   x           - X coordinate (0-319)
-;;   y           - Y coordinate (0-199)
-;;
-;; return value:  Ink color of pixel (0..3)
-;;
-;; Required memory:
-;;    TODO bytes (TODO bytes core routine + TODO bytes binding wrapper)
-;;
-;; Time Measures (Includes TODO us / TODO cycles binding wrapper overhead):
-;;    Get color at subPixel 0            | 101    | 11250          | 45000
-;;    Get color at subPixel 3            | 101    | 11250          | 45000
-;; (end code)
-
 _cpct_getColorAtM1::
    pop  af                     ;; [3] af = Return address
    pop  bc                     ;; [3] bc = y  (b should be 0  )

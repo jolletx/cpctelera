@@ -18,37 +18,5 @@
 ;;-------------------------------------------------------------------------------
 .module cpct_geometry
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-;; Function: cpct_getColorAtM1
-;;
-;;    Get INK color of one pixel in Mode 1 (320x200, 4 colors).
-;;
-;; Assembly call:
-;;    > call cpct_getColorAtM1_asm 
-;;          HL = Screen start Adress
-;;          DE = X
-;;          C  = Y
-;;
-;;      Destroyed Register values:
-;;          AF, BC, DE, HL
-;;
-;;      Output : A = color
-;;
-;; Required memory:
-;;    TODO bytes (TODO bytes core routine + TODO bytes binding wrapper)
-;;
-;; Time Measures (Includes TODO us / TODO cycles binding wrapper overhead):
-;;    Get color at subPixel 0            | 101    | 11250          | 45000
-;;    Get color at subPixel 3            | 101    | 11250          | 45000
-;; (end code)
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-;; ASM bindings for <cpct_geometryHorizontlaLineM1>
-;;
-;;  0 microSecs, 0 bytes
-;;
-
-;; ASM entry point for fast getColorAt from asm
 cpct_getColorAtM1_asm::
 .include  /cpct_getColorAtM1.asm/

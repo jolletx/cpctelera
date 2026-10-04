@@ -19,25 +19,59 @@
 
 .module cpct_geometry
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; u8 cpct_clampingLineM1 (i16 ioPt1[2],i16 ioPt2[2])
-;; This function will clamp the line defined by ioPt1 and ioPt2 to the screen boundaries
-;; It will modify the points to be inside the screen boundaries if they are outside
-;; It will return 0 if the result line is inside the screen boundaries, 
-;;                1 if the line is outside the screen boundaries and should not be drawn
-;; cpct_clampingLine_ams
-;;    input HL adress of pt1
-;;          DE adress of pt2
-;;    output A=0 if line is inside screen boundaries
-;;           A=1 if line is outside screen boundaries and should not be drawn
-;;    modifies AF, BC, DE, HL
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 .globl      ___mulsint2slong     ;; sdcc 16bit multiplication to 32bit DEHL = HL * DE
 .globl      __divslong           ;; sdcc 32 bit division to 16 DE = DEHL / stacked 16 bits
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 .include \../cpct_geomConstants.h.s\
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Function: cpct_clampLineM1
+;;
+;;    Clamps the line defined by ioPt1 and ioPt2 to the screen boundaries in Mode 1 (320x200, 4 colors)
+;;
+;; Algorithm & Details:
+;;    The routine checks for each border of screen if points are in or out of this border.
+;;    If both point are out bound it returns 1
+;;    if both are in it checks next border
+;;    If only one is out, it computes the intersection of the line ioPt1 and ioPt2 with this border and modifies the out bound point with it.  
+;;    It will return 
+;;       - 0 if the result line is inside the screen boundaries, 
+;;       - 1 if the line is outside the screen boundaries and should not be drawn
+;;    Warning: input points are modified use a copy of coordinates if necessary
+;;
+;; C Definition:
+;;    u8 cpct_clampLineM1(i16 *ioPt1, i16 *ioPt2);
+;;
+;; Input Parameters:
+;;    (2B HL)  ioPt1      - Adress of pt1 coordinates in signed 16 bits X/Y
+;;    (2B DE)  ioPt2      - Adress of pt2 coordinates in signed 16 bits X/Y
+;;
+;; Output:
+;;    (1B A)   canDraw    - 0 means that a line can be drawn, 1 that the line is outside of screen
+;;
+;; Assembly call:
+;;    > call cpct_clampLineM1_asm
+;;
+;; Destroyed Register values:
+;;    AF, BC, DE, HL
+;;
+;; (start code)
+;; Required memory:
+;;    XXX bytes core routine  + 4 bytes data + SDCC multiplication and division
+;;
+;; Time Measures:
+;;    Case                                      | microSecs (us) | CPU Cycles
+;;   ---------------------------------------------------------------------------------
+;;    (10,20),(30,40)     in  (0 intersect)     | XXX            | XXX
+;;    (-10,-20),(330,240) in  (4 intersect)     | XXX            | XXX
+;;    (-10,20),(-30,40)   out (0 intersect)     | XXX            | XXX
+;;    (-10,-20),(30,-40)  out (1 intersect)     | XXX            | XXX
+;;   ---------------------------------------------------------------------------------
+;; (end code)
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 .area _DATA
 pt1Adress:         .dw   0        ;; Adress of pt1 
@@ -69,12 +103,12 @@ cpct_clampLineM1_asm::
    ;; pt1 is inside but not pt2 - Need to project pt1-pt2 on X=0 and modify pt2
    push  iy                      ;; [5] push pt2 adress
    jr    computeXMin             ;; [3] Move to computation
-pt2GEXMin::                      ;; pt2 > XMin, hl contains pt1
+pt2GEXMin:                      ;; pt2 > XMin, hl contains pt1
    call  checkXMin               ;; [5] pt1.X > XMin ?
    jr    z,checkXMaxAlgo         ;; [2/3] Yes, Nothing to do move to next check
    ;; pt2 is inside but not pt1 - Need to project pt1-pt2 on X=0 and modify pt1
    push  ix                      ;; [5] push pt1 adress
-computeXMin::
+computeXMin:
    ld    bc,#XMinM1              ;; [3] prepare intersect input with XMax
    call   computeXIntersect      ;; [5] launch computation on X intersection of pt1/pt2 with bc, result in hl
    pop   de                      ;; [3] retrieve adress of pt to modify (either pt1 or pt2)
@@ -87,7 +121,7 @@ computeXMin::
    inc   hl                      ;; [2] Move to pt.Y MSB
    ld    (hl),d                  ;; [2] Put computed MSB value in MSB
 
-checkXMaxAlgo::
+checkXMaxAlgo:
    ld    hl,(pt2Adress)          ;; [5] hl = pt2
    call  checkXMax               ;; [5] Check if pt2.X > XMax
    ld    hl,(pt1Adress)          ;; [5] hl = pt1
@@ -97,12 +131,12 @@ checkXMaxAlgo::
    ;; pt1 is inside but not pt2 - Need to project pt1-pt2 on X=XMax and modify pt2
    push  iy                      ;; [5] push pt2 adress
    jr    computeXMax             ;; [3] Move to computation
-pt2LEXMax::                      ;; pt2 in bound of XMax - hl = pt1
+pt2LEXMax:                      ;; pt2 in bound of XMax - hl = pt1
    call  checkXMax               ;; [5] pt1.X > XMax
    jr    z,checkYMinAlgo         ;; [2/3] Nothing to do move to next check
    ;; pt2 is inside but not pt1 - Need to project pt1-pt2 on X=XMax and modify pt1
    push  ix                      ;; [5] push pt1 adress
-computeXMax::
+computeXMax:
    ld    bc,#XMaxM1              ;; [3] prepare intersect input with XMax
    call  computeXIntersect       ;; [5] launch computation on X intersection of pt1/pt2 with bc, result in hl
    pop   de                      ;; [3] retrieve adress of pt to modify
@@ -115,7 +149,7 @@ computeXMax::
    inc   hl                      ;; [2] Move to pt.Y MSB
    ld    (hl),d                  ;; [2] Put computed MSB value in MSB
 
-checkYMinAlgo::
+checkYMinAlgo:
    ld    hl,(pt2Adress)          ;; [5] hl = pt2
    call  checkYMin               ;; [5] Check if pt2.Y > YMin
    ld    hl,(pt1Adress)          ;; [5] hl = pt1
@@ -126,12 +160,12 @@ checkYMinAlgo::
    ;; pt1 is inside but not pt2 - Need to project pt1-pt2 on Y=0 and modify pt2
    push  iy                      ;; [5] push pt2 adress
    jr    computeYMin             ;; [3] Move to computation
-pt2GEYMin::                      ;; pt2 in bound of YMin
+pt2GEYMin:                      ;; pt2 in bound of YMin
    call  checkYMin               ;; [5] pt1.Y < YMin
    jr    z,checkYMaxAlgo         ;; [2/3] Nothing to do move to next check
    ;; pt2 is inside but not pt1 - Need to project pt1-pt2 on Y=0 and modify pt1
    push  ix                      ;; [5] push pt1 adress
-computeYMin::
+computeYMin:
    ld    bc,#YMin                ;; [3] input = YMin
    call  computeYIntersect       ;; [5] launch computation on Y intersection of pt1/pt2 with bc, result in hl
    pop   de                      ;; [3] de = adress of point to modify
@@ -143,7 +177,7 @@ computeYMin::
    ld    (hl),#YMin              ;; [3] put YMin LSB in pt.Y
    inc   hl                      ;; [2] move to MSB of pt.Y
    ld    (hl),#0                 ;; [3] put YMin MSB in pt.Y
-checkYMaxAlgo::
+checkYMaxAlgo:
    ;; Check if pt2.Y < YMax
    ld    hl,(pt2Adress)          ;; [5] hl = pt2
    call  checkYMax               ;; [5] Check if pt2.Y > YMax
@@ -155,12 +189,12 @@ checkYMaxAlgo::
    ;; pt1 is inside but not pt2 - Need to project pt1-pt2 on Y=YMax and modify pt2
    push  iy                      ;; [5] push pt2 adress
    jr    computeYMax             ;; [3] move to computation
-pt2LEYMax::                      ;; pt2 in bound of YMax
+pt2LEYMax:                      ;; pt2 in bound of YMax
    call  checkYMax               ;; [5] pt1.Y > YMax
    jr    z,drawLine              ;; [2/3] Nothing to do move to end of checks
    ;; pt2 is inside but not pt1 - Need to project pt1-pt2 on Y=YMax and modify pt1
    push  ix                      ;; [5] push pt1 adress
-computeYMax::
+computeYMax:
    ld    bc,#YMax                ;; [3] input = YMax
    call  computeYIntersect       ;; [5] launch computation on Y intersection of pt1/pt2 with bc, result in hl
    pop   de                      ;; [3] de = adress of point to modify
@@ -172,29 +206,29 @@ computeYMax::
    ld    (hl),#YMax              ;; [3] put YMax LSB in pt.Y
    inc   hl                      ;; [2] move to MSB of pt.Y
    ld    (hl),#0                 ;; [3] put YMax MSB in pt.Y
-drawLine::
+drawLine:
    xor   a                       ;; [2] set A=0 for ouput that a line can be drawn
    jr    endClamping             ;; [3] Jump to end of subroutine
-noDrawLine::
+noDrawLine:
    ld    a,#0x01                 ;; [2] set A=1 for ouput that a line cannot be drawn
-endClamping::
+endClamping
    pop   iy                      ;; [4] Retrieve IX
    pop   ix                      ;; [4] Retrieve IY
    ret                           ;; [3] return
-setZFlagAndReturn::
+setZFlagAndReturn:
 ; Small helper to set ZFlag and return
    xor   a                       ;; [2] a = 0 and set ZFlag = 1
    ret                           ;; [3] return
-resetZFlagAndReturn::
+resetZFlagAndReturn:
 ; Small helper to reset ZFlag and return
    or   a,#0x01                  ;; [2] a = 1 and reset ZFlag = 0
    ret                           ;; [3] return
-checkXMin::
+checkXMin:
 ;; Set Z Flag if X >= XMin
    inc   hl                      ;; [2] go to MSB of X
    bit   7,(hl)                  ;; [3] Check if msb is set on MSB-X
    ret                           ;; [3] If not (Z == 1) X is positif so >= XMin, if yes (Z==0) X<XMin
-checkXMax::
+checkXMax:
 ;; Set Z Flag if X <= XMax
    inc   hl                      ;; [2] go to MSB of X
    ld    a,(hl)                  ;; [2] A = MSB-X
@@ -208,7 +242,7 @@ checkXMax::
    jr    nc,resetZFlagAndReturn  ;; [2/3] LSB-X > XMaxLSB, so reset ZF and return
    jr    setZFlagAndReturn       ;; [3] LSB-X <= XMaxLSB : set ZF and return
 
-checkYMin::
+checkYMin:
 ;; Set Z Flag if Y >= YMin
    inc   hl                      ;; [2] go to MSB of X
    inc   hl                      ;; [2] go to LSB of Y
@@ -216,7 +250,7 @@ checkYMin::
    bit   7,(hl)                  ;; [3] Check if msb of MSB-Y is set
    ret                           ;; [3] If not (Z == 1) Y is positif so >= YMin, if yes (Z==0) Y<YMin
 
-checkYMax::
+checkYMax:
 ;; Set Z Flag if Y <= YMax
    inc   hl                      ;; [2] go to MSB of X
    inc   hl                      ;; [2] go to LSB of Y
@@ -230,7 +264,7 @@ checkYMax::
    jr    nc,resetZFlagAndReturn  ;; [2/3] LSB-Y > YMax, so reset ZF and return
    jr    setZFlagAndReturn       ;; [3] LSB-Y <= YMax : set ZF and return
 
-computeXIntersect::
+computeXIntersect:
 ;; Compute the intersection of the line defined by x=(ix),y=(iy) with the vertical line defined by X = bc
 ;; returns Y value in HL
    ld    l,(ix+0)                ;; [5] l = LSB of x1
@@ -296,7 +330,7 @@ cx_LSBDenom=.+1
    add   hl,de                   ;; [3] hl = y1 + quotient
    ret                           ;; [3] return
 
-computeYIntersect::
+computeYIntersect:
    ld    l,(ix+2)                ;; [5] l = LSB of y1
    ld    h,(ix+3)                ;; [5] hl=y1
    ld    a,c                     ;; [1] a=LSB input
