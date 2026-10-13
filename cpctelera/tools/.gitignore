@@ -1,2 +1,4 @@
 rvm/
 winape/
+z80-timings/__pycache__
+z80-timings/temp/*
