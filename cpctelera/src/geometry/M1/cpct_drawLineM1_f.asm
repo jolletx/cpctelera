@@ -109,22 +109,22 @@
 ;; DATA SECTION
 ;;-------------------------------------------------------------------------------
 .area _DATA
-rb_off_start:   .db 0          ;; Start pixel offset (0..3)
-rb_off_end:     .db 0          ;; End pixel offset (0..3)
-rb_byte_start:  .db 0          ;; Start byte column (0..79)
-rb_byte_end:    .db 0          ;; End byte column (0..79)
-rb_mid_count:   .db 0          ;; Number of full intermediate bytes
-screen_start:   .ds 2          ;; Base VRAM address (16-bit)
-screen_ptr_val: .dw 0          ;; Initial computed VRAM pointer (16-bit)
-color_pen:      .db 0          ;; Pre-multiplied color index (color * 4)
-y0_val:         .db 0          ;; Current Y coordinate (RAM storage)
-x0_val:         .dw 0          ;; Current X0 coordinate (RAM storage)
-abs_dx:         .dw 0          ;; Absolute DX distance (16-bit)
-abs_dy:         .dw 0          ;; Absolute DY distance (16-bit)
-sx_is_left:     .db 0          ;; SX direction flag (0 = Right, 1 = Left)
-sy_is_up:       .db 0          ;; SY direction flag (0 = Down, 1 = Up)
-cur_mask:       .db 0          ;; Current Mode 1 pixel mask
-cur_col:        .db 0          ;; Current Mode 1 pixel color byte
+rb_off_start:   .db 0          ;; (1) Start pixel offset (0..3)
+rb_off_end:     .db 0          ;; (1) End pixel offset (0..3)
+rb_byte_start:  .db 0          ;; (1) Start byte column (0..79)
+rb_byte_end:    .db 0          ;; (1) End byte column (0..79)
+rb_mid_count:   .db 0          ;; (1) Number of full intermediate bytes
+screen_start:   .ds 2          ;; (2) Base VRAM address (16-bit)
+screen_ptr_val: .dw 0          ;; (2) Initial computed VRAM pointer (16-bit)
+color_pen:      .db 0          ;; (1) Pre-multiplied color index (color * 4)
+y0_val:         .db 0          ;; (1) Current Y coordinate (RAM storage)
+x0_val:         .dw 0          ;; (2) Current X0 coordinate (RAM storage)
+abs_dx:         .dw 0          ;; (2) Absolute DX distance (16-bit)
+abs_dy:         .dw 0          ;; (2) Absolute DY distance (16-bit)
+sx_is_left:     .db 0          ;; (1) SX direction flag (0 = Right, 1 = Left)
+sy_is_up:       .db 0          ;; (1) SY direction flag (0 = Down, 1 = Up)
+cur_mask:       .db 0          ;; (1) Current Mode 1 pixel mask
+cur_col:        .db 0          ;; (1) Current Mode 1 pixel color byte
 
 ;;-------------------------------------------------------------------------------
 ;; CODE SECTION
@@ -184,7 +184,7 @@ h_noExchange:
     rr  l                         ;; [2] rotate l once with carry from b
     srl l                         ;; [2] Shift l right, now l is the Right byte offset in the line (0-39)
     ld  a,l                       ;; [1] a = right octet in line
-    sub e                         ;; [2] a = right octet - left octet = nbOctet to process
+    sub e                         ;; [1] a = right octet - left octet = nbOctet to process
     ld  (abs_dx),a                ;; [4] Store nb octet
 
     ld  a,(y0_val)                ;; [4] a = Y0
@@ -202,11 +202,11 @@ h_testHighBitColor:
     rra                           ;; [1] put bit 1 of INK in carry
     jr  nc,h_checkSameOctet         ;; [2/3] if bit1 = 0 d contains the needed color information
     ld  a,#0x0F                   ;; [2] a = full pixel of INK 2
-    or  d                         ;; [2] merge on full pixel of INK 1 or 0
+    or  d                         ;; [1] merge on full pixel of INK 1 or 0
     ld  d,a                       ;; [1] d = full octet of color_pen
 h_checkSameOctet:
     ld  a,(abs_dx)                ;; [4] a = nbOctet
-    or a                          ;; [2] check if zero
+    or a                          ;; [1] check if zero
     jr nz,h_notSameOctet          ;; [2/3] nbOctet > 0 : jump
     ;; Need to change from left subpixel to right subpixel actual screen octet
     ld  a,(rb_off_end)            ;; [4] a = right subpixel
@@ -229,9 +229,9 @@ h_checkSameOctet:
     ld  b,a                       ;; [1] b = current screen octet (cleared from left to right subpixel)
     ld  a,e                       ;; [1] retrieve mask
     cpl                           ;; [1] invert mask
-    and d                         ;; [2] set requested color to inverted pixelsmask
+    and d                         ;; [1] set requested color to inverted pixelsmask
 
-    or  b                         ;; [2] merge result with current screen octet
+    or  b                         ;; [1] merge result with current screen octet
     ld  d,a                       ;; [1] use d as new color for next instruction to run
 
     jp  h_drawLastOctet           ;; [3] Move to last draw
@@ -239,7 +239,7 @@ h_notSameOctet:
     ; Deal from left subpixel to third on actual adress, a = NBoCTET FROM PREVIOUS CHECK
     ld  e,a                       ;; [1] e = nbOctet
     ld  a,(rb_off_start)          ;; [4] a = left subpixel
-    or  a                         ;; [2] if 0 we can do full pixels, if not we need to mask and move forward 1
+    or  a                         ;; [1] if 0 we can do full pixels, if not we need to mask and move forward 1
     jr  z,h_drawFullOctets        ;; [2/3] We can draw octets from there, but we will need to check last octet
     rlca                          ;; [1] multiply by 2
     rlca                          ;; [1] multiply by 2
@@ -257,8 +257,8 @@ h_notSameOctet:
     ld  b,a                       ;; [1] b = current screen octet (cleared)
     ld  a,c                       ;; [1] retrieve mask
     cpl                           ;; [1] invert mask
-    and d                         ;; [2] set requested color to inverted pixels
-    or  b                         ;; [2] merge result with current screen octet
+    and d                         ;; [1] set requested color to inverted pixels
+    or  b                         ;; [1] merge result with current screen octet
 
     ld  (hl),a                    ;; [2] Set screen octet with preserved pixels before b
     inc hl                        ;; [2] We have finished this first octet, increase adress
@@ -272,7 +272,7 @@ h_drawFullOctets:
 
     ld  b,#0                      ;; [2] reset b
     ld  a,#79                     ;; [2] a = max jump
-    sub e                         ;; [2] a = 79 - nbOctect (so from 0 max width of line to 79 jump over)
+    sub e                         ;; [1] a = 79 - nbOctect (so from 0 max width of line to 79 jump over)
     rla                           ;; [1] a = a * 2 because ld (hl),d inc hl
     ld c,a                        ;; [1] bc = offset
     add hl,bc                     ;; [3] Adress to jump to
@@ -305,9 +305,9 @@ h_onLastOctet:
     ld  b,a                       ;; [1] b = current screen octet (cleared)
     ld  a,c                       ;; [1] retrieve mask
     cpl                           ;; [1] invert mask
-    and d                         ;; [2] set requested color to inverted pixels
+    and d                         ;; [1] set requested color to inverted pixels
 
-    or  b                         ;; [2] merge result with current screen octet
+    or  b                         ;; [1] merge result with current screen octet
     ld  d,a                       ;; [1] use d as new color for next instruction to run
 h_drawLastOctet:      
     ld  (hl),d                    ;; [2] Computed color in last byte

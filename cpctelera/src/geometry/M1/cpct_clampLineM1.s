@@ -59,7 +59,7 @@
 ;;
 ;; (start code)
 ;; Required memory:
-;;    XXX bytes core routine  + 4 bytes data + SDCC multiplication and division
+;;    438 bytes core routine  + 4 bytes data + SDCC multiplication and division
 ;;
 ;; Time Measures:
 ;;    Case                                      | microSecs (us) | CPU Cycles
@@ -74,8 +74,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 .area _DATA
-pt1Adress:         .dw   0        ;; Adress of pt1 
-pt2Adress :        .dw   0        ;; Adress of pt2
+pt1Adress:         .dw   0        ;; (2) Adress of pt1 
+pt2Adress :        .dw   0        ;; (2) Adress of pt2
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -207,17 +207,17 @@ computeYMax:
    inc   hl                      ;; [2] move to MSB of pt.Y
    ld    (hl),#0                 ;; [3] put YMax MSB in pt.Y
 drawLine:
-   xor   a                       ;; [2] set A=0 for ouput that a line can be drawn
+   xor   a                       ;; [1] set A=0 for ouput that a line can be drawn
    jr    endClamping             ;; [3] Jump to end of subroutine
 noDrawLine:
    ld    a,#0x01                 ;; [2] set A=1 for ouput that a line cannot be drawn
-endClamping
-   pop   iy                      ;; [4] Retrieve IX
-   pop   ix                      ;; [4] Retrieve IY
+endClamping:
+   pop   iy                      ;; [5] Retrieve IX
+   pop   ix                      ;; [5] Retrieve IY
    ret                           ;; [3] return
 setZFlagAndReturn:
 ; Small helper to set ZFlag and return
-   xor   a                       ;; [2] a = 0 and set ZFlag = 1
+   xor   a                       ;; [1] a = 0 and set ZFlag = 1
    ret                           ;; [3] return
 resetZFlagAndReturn:
 ; Small helper to reset ZFlag and return
@@ -232,7 +232,7 @@ checkXMax:
 ;; Set Z Flag if X <= XMax
    inc   hl                      ;; [2] go to MSB of X
    ld    a,(hl)                  ;; [2] A = MSB-X
-   or    a                       ;; [2] check 0
+   or    a                       ;; [1] check 0
    ret   z                       ;; [2/4] no need to check more X < XMax and Z = 1
    dec   a                       ;; [1] check MSB-X with 1
    jr    nz,resetZFlagAndReturn  ;; [2/3] MSB-X != 1, so X > XMax, reset ZF and return
@@ -256,7 +256,7 @@ checkYMax:
    inc   hl                      ;; [2] go to LSB of Y
    inc   hl                      ;; [2] go to MSB of Y
    ld    a,(hl)                  ;; [2] A = MSB-Y
-   or    a                       ;; [2] check 0
+   or    a                       ;; [1] check 0
    jr    nz,resetZFlagAndReturn  ;; [2/3] no need to check more Y > YMax so reset flag and return
    dec   hl                      ;; [2] go to LSB of Y
    ld    a,(hl)                  ;; [2] A = LSB-Y
@@ -270,22 +270,22 @@ computeXIntersect:
    ld    l,(ix+0)                ;; [5] l = LSB of x1
    ld    h,(ix+1)                ;; [5] hl=x1
    ld    a,c                     ;; [1] a=LSB input
-   sub   l                       ;; [2] a = LSB of target_dx = input -x1
+   sub   l                       ;; [1] a = LSB of target_dx = input -x1
    ld    e,a                     ;; [1] e = LSB of target_dx
    ld    a,b                     ;; [1] a=MSB input
-   sbc   a,h                     ;; [2] a = MSB of target_dx (including carry)
+   sbc   a,h                     ;; [1] a = MSB of target_dx (including carry)
    ld    d,a                     ;; [1] de = target_dx = input - x1
 
    ld l, (iy+2)                  ;; [5] L = LSB of y2
    ld h, (iy+3)                  ;; [5] HL = y2
    ld c, (ix+2)                  ;; [5] C = LSB of y1
    ld b, (ix+3)                  ;; [5] BC = y1
-   or a                          ;; [2] Clear carry
+   or a                          ;; [1] Clear carry
    sbc hl, bc                    ;; [4] HL = dy = y2 - y1
 
    push  iy                      ;; [5] iy is modified by sdcc
    call  ___mulsint2slong        ;; [5] DEHL = DE * HL
-   pop   iy                      ;; [4] retrieve
+   pop   iy                      ;; [5] retrieve
 
    push  hl                      ;; [4]
    push  de                      ;; [4] push DEHL
@@ -294,12 +294,12 @@ computeXIntersect:
    ld    h,(iy+1)                ;; [5] hl = x2
    ld    e,(ix+0)                ;; [5] e= LSB of x1
    ld    d,(ix+1)                ;; [5] DE = x1
-   or    a                       ;; [2] Clear carry
+   or    a                       ;; [1] Clear carry
    sbc   hl,de                   ;; [4] hl = dx = x2 - x1
 
    ;; push 32bit hl on stack for call __divslong denominator
    ;; So push 0 or #0xFF depending on HL sign
-   xor   a                       ;; [2] a = 0
+   xor   a                       ;; [1] a = 0
    bit   7,h                     ;; [2] check h msb for sign of hl
    jr    z,cx_notNeg             ;; [2/3] if not ZF, h l is positif
    cpl                           ;; [1] complement a to 0xFF
@@ -334,22 +334,22 @@ computeYIntersect:
    ld    l,(ix+2)                ;; [5] l = LSB of y1
    ld    h,(ix+3)                ;; [5] hl=y1
    ld    a,c                     ;; [1] a=LSB input
-   sub   l                       ;; [2] a = LSB of target_dy = input - y1
+   sub   l                       ;; [1] a = LSB of target_dy = input - y1
    ld    e,a                     ;; [1] e = LSB of target_dy = input - y1
    ld    a,b                     ;; [1] a=MSB input
-   sbc   a,h                     ;; [2] a = MSB of target_dy (including carry)
+   sbc   a,h                     ;; [1] a = MSB of target_dy (including carry)
    ld    d,a                     ;; [1] de = target_dx = input - y1
 
    ld l, (iy+0)                  ;; [5] L = LSB of x2
    ld h, (iy+1)                  ;; [5] HL = x2
    ld c, (ix+0)                  ;; [5] C = LSB of x1
    ld b, (ix+1)                  ;; [5] BC = x1
-   or a                          ;; [2] Clear carry
+   or a                          ;; [1] Clear carry
    sbc hl, bc                    ;; [4] HL = dx = x2 - x1
 
    push  iy                      ;; [5] iy is modified by sdcc
    call  ___mulsint2slong        ;; [5] DEHL = DE * HL
-   pop   iy                      ;; [4] retrieve
+   pop   iy                      ;; [5] retrieve
 
    push  hl                      ;; [4]
    push  de                      ;; [4] push DEHL
@@ -358,12 +358,12 @@ computeYIntersect:
    ld    h,(iy+3)                ;; [5] hl = y2
    ld    e,(ix+2)                ;; [5] e = LSB of y1
    ld    d,(ix+3)                ;; [5] DE = y1
-   or    a                       ;; [2] Clear carry
+   or    a                       ;; [1] Clear carry
    sbc   hl,de                   ;; [4] hl = dy = y2 - y1
 
    ;; push 32bit hl on stack for call __divslong denominator
    ;; So push 0 or #0xFF depending on HL sign in SMC
-   xor   a                       ;; [2] a = 0
+   xor   a                       ;; [1] a = 0
    bit   7,h                     ;; [2] check h msb for sign of hl
    jr    z,cy_notNeg             ;; [2/3] if h > 0 use a = 0
    cpl                           ;; [1] else use a = 0xFF

@@ -44,13 +44,13 @@
 ;;
 ;; (start code)
 ;; Required memory:
-;;    XXX bytes (XXX bytes core routine + XXX bytes binding wrapper)
+;;    44 bytes (41 bytes core routine + 3 bytes binding wrapper)
 ;;
-;; Time Measures:
+;; Time Measures (+10 us for c binding wrapper):
 ;;    Case                               | microSecs (us) | CPU Cycles
 ;;   ---------------------------------------------------------------------------------
-;;    Get color on a subPixel 0          | XXX            | XXX
-;;    Get color on a subPixel 3          | XXX            | XXX
+;;    Get color 0 on a subPixel 0        | XX             | XX
+;;    Get color 3 on a subPixel 3        | XX             | XX
 ;; (end code)
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -69,13 +69,13 @@
     pop     af                      ;; [3] retrieve subpixel in a
 
     ld      c,(hl)                  ;; [2] Get screen octet
-    or      a                       ;; [2] Check if subpixel is 0, if so start the check
-    jr      z,computeColor          ;; [3-2] if last, jump
+    or      a                       ;; [1] Check if subpixel is 0, if so start the check
+    jr      z,computeColor          ;; [2/3] if last, jump
 
     ld      b,a                     ;; [1] for loop
 subpixel_loop:
     sla     c                       ;; [2] shift screen octet to the left
-    djnz    subpixel_loop           ;; [3-2] until last subpixel on left
+    djnz    subpixel_loop           ;; [3/4] until last subpixel on left
 computeColor:
     ld      a,c                     ;; [1] let's decode screen value
     and     #0x88                   ;; [2] and 0b10001000 to mask subpixel 0
@@ -86,10 +86,10 @@ computeColor:
     rl      l                       ;; [2] Set bit 0 of l using carry (carry = 0 after)
                                     ;; l = low bit of color (0 or 1, don't care)
 ;; Check high bit of color
-    or      a                       ;; [2] if a != 0 add 2 to current color
+    or      a                       ;; [1] if a != 0 add 2 to current color
     ld      a,l                     ;; [1] a = 0 or a=1
-    jr      z,end_getColorAt        ;; [3-2] Jump over increase if no high bit found with 'or a'
+    jr      z,end_getColorAt        ;; [2/3] Jump over increase if no high bit found with 'or a'
     inc     a                       ;; [1] a += 2 to set high bit of INK
     inc     a                       ;; [1]
 end_getColorAt:                     ;; Here a = output color
-    ret                             ;; [2] returns
+    ret                             ;; [3] returns
