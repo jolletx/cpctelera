@@ -18,18 +18,11 @@
 ;;-------------------------------------------------------------------------------
 .module cpct_geometry
 
-;; M1 screen values
 .include \../cpct_geomConstants.h.s\
 
-;;
-;; C bindings for <cpct_scanFillM1>
-;;
-;;  16 microSecs, 4 bytes
-;;
 _cpct_scanFillM1::
    pop af                      ;; [3] af = Return addressc
    pop bc                      ;; [3] c = y  / b = newColor
    push af                     ;; [4] Restore return address to stack because __z88dk_callee
 
 .include  /cpct_scanFillM1.asm/
-

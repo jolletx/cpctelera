@@ -19,9 +19,41 @@
 
 .globl cpct_getScreenPtr_asm
 
-;;          HL = Screen start Adress
-;;          DE = X
-;;          C  = Y
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Function: cpct_getColorAtM1
+;;
+;;    Get INK color of one pixel in Mode 1 (320x200, 4 colors).
+;;
+;; C Definition:
+;;      u8  cpct_getColorAtM1 (u8* vmem, u16 x, u16 y) __z88dk_callee;
+;;
+;; Input Parameters:
+;;   (2B HL) vmem       - Base VRAM memory address (typically 0xC000)
+;;   (2B DE) x          - X coordinate (0-319 no checks)
+;;   (2B BC) y          - Y coordinate (0-199 no checks)
+;;
+;; Return value:
+;;   (1B A) outCol      - Ink color of pixel (0..3)
+;;
+;; Assembly call:
+;;    > call cpct_getColorAtM1_asm 
+;;
+;; Destroyed Register values:
+;;          AF, BC, DE, HL
+;;
+;; (start code)
+;; Required memory:
+;;    XXX bytes (XXX bytes core routine + XXX bytes binding wrapper)
+;;
+;; Time Measures:
+;;    Case                               | microSecs (us) | CPU Cycles
+;;   ---------------------------------------------------------------------------------
+;;    Get color on a subPixel 0          | XXX            | XXX
+;;    Get color on a subPixel 3          | XXX            | XXX
+;; (end code)
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
     ld      a,e                     ;; [1] a = low X
     and     #0x03                   ;; [2] Keep only the 2 least significant bits of X0 : subPixel
@@ -59,5 +91,5 @@ computeColor:
     jr      z,end_getColorAt        ;; [3-2] Jump over increase if no high bit found with 'or a'
     inc     a                       ;; [1] a += 2 to set high bit of INK
     inc     a                       ;; [1]
-end_getColorAt:                     ;; a = output color
+end_getColorAt:                     ;; Here a = output color
     ret                             ;; [2] returns
