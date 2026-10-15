@@ -36,6 +36,11 @@ start:
     call mystery
     unknown_op 1
     sub e
+    ld__a_ixl
+    cp__ixh
+    ld___hl__a
+    ld__ixh #0x12
+    ld__iyl #0x34
     ld de,(x0_val)
     or d
     and d
@@ -43,6 +48,12 @@ start:
     ld a,>#label
     ld a,<#1234
     ld a,>#0x1234
+.macro ld__a_ixl
+    ld a, ixl
+.endm
+.macro cp__ixh
+    cp ixh
+.endm
 .macro draw
     ld a, b
 .endm

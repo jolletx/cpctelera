@@ -36,6 +36,11 @@ start:
     call mystery                 ;; [5]
     unknown_op 1
     sub e                        ;; [1]
+    ld__a_ixl                    ;; [2]
+    cp__ixh                      ;; [2]
+    ld___hl__a                   ;; [2]
+    ld__ixh #0x12                ;; [3]
+    ld__iyl #0x34                ;; [3]
     ld de,(x0_val)               ;; [6]
     or d                         ;; [1]
     and d                        ;; [1]
@@ -43,10 +48,16 @@ start:
     ld a,>#label                 ;; [2]
     ld a,<#1234                  ;; [2]
     ld a,>#0x1234                ;; [2]
-.macro draw
-    ld a, b
+.macro ld__a_ixl
+    ld a, ixl                    ;; [2]
 .endm
-    draw
+.macro cp__ixh
+    cp ixh                       ;; [2]
+.endm
+.macro draw
+    ld a, b                      ;; [1]
+.endm
+    draw                         ;; [1]
 #ifdef FEATURE
 #endif
 next:

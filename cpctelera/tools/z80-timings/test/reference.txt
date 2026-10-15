@@ -1,6 +1,6 @@
 Analysis: <input>
-Recommended modifications: 32
-Global code size: 52 bytes
+Recommended modifications: 41
+Global code size: 64 bytes
 Global data size: 28 bytes
 
 Warnings:

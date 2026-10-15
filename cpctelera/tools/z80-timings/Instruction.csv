@@ -5,6 +5,7 @@ ld k,(hl);2;1
 ld (hl),k;2;1
 ld k,s;2;2
 ld s,k;2;2
+ld s,n;3;3
 ld (qq+of),k;5;3
 ld k,(qq+of);5;3
 ld (hl),n;3;2

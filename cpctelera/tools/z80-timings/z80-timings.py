@@ -250,6 +250,35 @@ def match_instruction(opcode, operand_text, entries, substitutions):
     return None
 
 
+def decode_macro_instruction(opcode: str, operands: str, entries, substitutions):
+    match = re.match(r"^([a-z][a-z0-9]*)(_+)(.+)$", opcode.lower())
+    if not match or len(match.group(2)) not in {2, 3}:
+        return None
+
+    instruction, separator, encoded_operands = match.groups()
+    if len(separator) == 3:
+        parts = encoded_operands.split("__")
+        decoded_operands = []
+        for index, part in enumerate(parts):
+            part = part.strip("_")
+            if not part:
+                return None
+            if index == 0:
+                part = f"({part})"
+            decoded_operands.append(part)
+    else:
+        decoded_operands = encoded_operands.split("_")
+        if any(not part for part in decoded_operands):
+            return None
+
+    if operands:
+        decoded_operands.extend(split_values(operands))
+    decoded_text = ", ".join(decoded_operands)
+    if match_instruction(instruction, decoded_text, entries, substitutions):
+        return instruction, decoded_text
+    return None
+
+
 def is_concrete_template_operand(operand: str) -> bool:
     value = operand.strip().lower()
     registers = {"a", "b", "c", "e", "h", "l", "i", "r", "bc", "de", "hl", "af", "sp", "ix", "iy", "ixh", "ixl", "iyh", "iyl", "af'"}
@@ -470,7 +499,8 @@ def split_statement(line: str, known_opcodes):
             return None, "", True
     elif line and not line[0].isspace():
         first = re.match(r"^([^\s]+)(?:\s+(.*))?$", stripped)
-        if first and first.group(1).lower() not in known_opcodes and not first.group(1).startswith("."):
+        encoded_opcode = re.match(r"^[a-z][a-z0-9]*_{2,3}.", first.group(1), re.IGNORECASE) if first else None
+        if first and first.group(1).lower() not in known_opcodes and not first.group(1).startswith(".") and not encoded_opcode:
             remainder = first.group(2) or ""
             if remainder:
                 stripped = remainder
@@ -503,8 +533,25 @@ def analyze(path: Path, update: bool, modify: bool) -> AnalysisResult:
     data_size = 0
     recommendations = 0
     current_area = ""
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        contents = handle.read()
+    raw_contents = path.read_bytes()
+    decoded_lines = []
+    byte_offset = 0
+    for line_number, raw_line in enumerate(raw_contents.splitlines(keepends=True), 1):
+        try:
+            decoded_lines.append(raw_line.decode("utf-8"))
+        except UnicodeDecodeError as error:
+            if raw_line.lstrip().startswith(b";"):
+                decoded_lines.append(raw_line.decode("utf-8", errors="replace"))
+            else:
+                preview = raw_line.rstrip(b"\r\n").decode("utf-8", errors="replace")
+                issues.append(LineIssue(
+                    line_number,
+                    f"Invalid UTF-8 at column {error.start + 1}, byte offset {byte_offset + error.start}: "
+                    f"{error.reason}; source line: {preview!r}; raw bytes: {raw_line.rstrip(bytes([10, 13]))!r}",
+                ))
+                return AnalysisResult([], issues, 0, 0, 0)
+        byte_offset += len(raw_line)
+    contents = "".join(decoded_lines)
     line_ending = "\r\n" if "\r\n" in contents else "\n"
     lines = contents.splitlines()
     known_opcodes = set(entries)
@@ -534,6 +581,8 @@ def analyze(path: Path, update: bool, modify: bool) -> AnalysisResult:
     comment_column = Counter(comment_columns).most_common(1)[0][0] if comment_columns else 0
 
     blocks = []
+    macro_timings = {}
+    macro_contexts = []
     repeat_multiplier = 1
     for line_number, raw_line in enumerate(lines, 1):
         opcode, operands, label_only = split_statement(raw_line, known_opcodes)
@@ -547,6 +596,8 @@ def analyze(path: Path, update: bool, modify: bool) -> AnalysisResult:
 
         if opcode == ".macro":
             blocks.append(("macro", repeat_multiplier))
+            macro_name = operands.split(None, 1)[0].lower() if operands else ""
+            macro_contexts.append({"name": macro_name, "cycles": 0, "size": 0, "instructions": 0, "fixed": bool(macro_name)})
             processed.append(ProcessedLine(raw_line, updated, None, 0, line_number=line_number))
             continue
         if opcode in {".rept", ".irp", ".irpc"}:
@@ -555,10 +606,14 @@ def analyze(path: Path, update: bool, modify: bool) -> AnalysisResult:
                 count = resolve_symbol_value(count_text, symbol_values)
                 if count is None:
                     issues.append(LineIssue(line_number, f"Cannot determine repeat count '{operands}'"))
+                    if macro_contexts:
+                        macro_contexts[-1]["fixed"] = False
                     count = 1
                 blocks.append(("rept", repeat_multiplier))
                 repeat_multiplier *= max(count, 0)
             else:
+                if macro_contexts:
+                    macro_contexts[-1]["fixed"] = False
                 blocks.append(("skip", repeat_multiplier))
             processed.append(ProcessedLine(raw_line, updated, None, 0, line_number=line_number))
             continue
@@ -567,19 +622,33 @@ def analyze(path: Path, update: bool, modify: bool) -> AnalysisResult:
                 block_type, previous_multiplier = blocks.pop()
                 if block_type == "rept":
                     repeat_multiplier = previous_multiplier
+                elif block_type == "macro":
+                    macro_context = macro_contexts.pop()
+                    if macro_context["fixed"] and macro_context["instructions"]:
+                        macro_timings[macro_context["name"]] = (
+                            str(macro_context["cycles"]),
+                            macro_context["size"],
+                        )
             processed.append(ProcessedLine(raw_line, updated, None, 0, line_number=line_number))
             continue
 
-        if any(block[0] in {"macro", "skip"} for block in blocks):
+        inside_macro = bool(macro_contexts)
+        if any(block[0] == "skip" for block in blocks):
             processed.append(ProcessedLine(raw_line, updated, None, 0, line_number=line_number))
             continue
 
         if opcode == ".area":
-            current_area = operands.split(None, 1)[0].strip('"') if operands else ""
+            if not inside_macro:
+                current_area = operands.split(None, 1)[0].strip('"') if operands else ""
             processed.append(ProcessedLine(raw_line, updated, None, 0, line_number=line_number))
             continue
 
         if opcode.startswith(".") or opcode.startswith("#"):
+            if inside_macro:
+                if opcode in DATA_DIRECTIVES or opcode in {".if", ".ifdef", ".ifndef", ".else", ".endif"}:
+                    macro_contexts[-1]["fixed"] = False
+                processed.append(ProcessedLine(raw_line, updated, None, 0, line_number=line_number))
+                continue
             directive_size = data_directive_size(opcode, operands)
             data_planned = False
             if directive_size is None:
@@ -601,18 +670,34 @@ def analyze(path: Path, update: bool, modify: bool) -> AnalysisResult:
             processed.append(ProcessedLine(raw_line, updated, None, size, issue="planned" if data_planned else None, line_number=line_number))
             continue
 
-        if opcode in known_macros:
-            processed.append(ProcessedLine(raw_line, updated, None, 0, line_number=line_number))
-            continue
-
-        matched = match_instruction(opcode, operands, entries, substitutions)
-        if matched is None:
+        macro_summary = None
+        decoded = decode_macro_instruction(opcode, operands, entries, substitutions)
+        if decoded:
+            opcode, operands = decoded
+        if not decoded and opcode in known_macros:
+            macro_summary = macro_timings.get(opcode)
+            if macro_summary is None:
+                if inside_macro:
+                    macro_contexts[-1]["fixed"] = False
+                processed.append(ProcessedLine(raw_line, updated, None, 0, line_number=line_number))
+                continue
+            matched = None
+        else:
+            matched = match_instruction(opcode, operands, entries, substitutions)
+        if matched is None and macro_summary is None:
+            if inside_macro:
+                macro_contexts[-1]["fixed"] = False
+                processed.append(ProcessedLine(raw_line, updated, None, 0, line_number=line_number))
+                continue
             issues.append(LineIssue(line_number, f"Unknown operator or macro '{opcode}'"))
             processed.append(ProcessedLine(raw_line, updated, None, 0, line_number=line_number))
             continue
 
-        timing = matched.time
-        size = matched.size
+        if macro_summary is not None:
+            timing, size = macro_summary
+        else:
+            timing = matched.time
+            size = matched.size
         existing = find_timing_comment(raw_line)
         planned = existing is None or existing != timing
         if existing is None:
@@ -624,14 +709,23 @@ def analyze(path: Path, update: bool, modify: bool) -> AnalysisResult:
             if not update:
                 issues.append(LineIssue(line_number, f"Timing mismatch: found [{existing}], expected [{timing}] (use --update to replace)"))
 
-        if not current_area or is_code_area(current_area):
+        if inside_macro:
+            macro_context = macro_contexts[-1]
+            if re.fullmatch(r"\d+", timing):
+                macro_context["cycles"] += int(timing) * repeat_multiplier
+                macro_context["size"] += size * repeat_multiplier
+                macro_context["instructions"] += repeat_multiplier
+            else:
+                macro_context["fixed"] = False
+            size *= repeat_multiplier
+        elif not current_area or is_code_area(current_area):
             code_size += size * repeat_multiplier
             size *= repeat_multiplier
         elif is_data_area(current_area):
             data_size += size * repeat_multiplier
             size *= repeat_multiplier
 
-        if opcode == "call":
+        if opcode == "call" and not inside_macro:
             targets = split_values(operands)
             target = targets[-1].strip("() ").lower() if targets else ""
             if target and target not in local_labels:
@@ -684,7 +778,7 @@ def print_summary(result: AnalysisResult, path: Path, verbose: bool, no_modify: 
 
 def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("file", help="SDAS source file to analyze")
+    parser.add_argument("file", help="SDAS source file or directory to analyze")
     parser.add_argument("--update", "-u", action="store_true", help="Replace incorrect timing comments")
     parser.add_argument("--verbose", "-v", action="store_true", help="Print recommended modifications")
     parser.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
@@ -692,9 +786,46 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     return parser.parse_args(list(argv))
 
 
+def analyze_directory(path: Path, args: argparse.Namespace) -> int:
+    source_files = sorted(
+        (item for item in path.rglob("*") if item.is_file() and item.suffix.lower() in {".s", ".asm"}),
+        key=lambda item: str(item).lower(),
+    )
+    if not source_files:
+        print(f"Error: no .s or .asm source files found in: {path}", file=sys.stderr)
+        return 2
+
+    total_recommendations = 0
+    total_code_size = 0
+    total_data_size = 0
+    total_issues = 0
+    files_with_issues = 0
+    for index, source_file in enumerate(source_files, 1):
+        relative_path = source_file.relative_to(path)
+        print(f"=== File {index}/{len(source_files)}: {relative_path} ===")
+        result = analyze(source_file, args.update, args.modify)
+        print_summary(result, source_file, args.verbose, not args.modify, args.debug)
+        total_recommendations += result.recommended_modifications
+        total_code_size += result.code_size
+        total_data_size += result.data_size
+        total_issues += len(result.issues)
+        files_with_issues += bool(result.issues)
+
+    print("Directory summary:")
+    print(f"Files analyzed: {len(source_files)}")
+    print(f"Recommended modifications: {total_recommendations}")
+    print(f"Global code size: {total_code_size} bytes")
+    print(f"Global data size: {total_data_size} bytes")
+    print(f"Warnings: {total_issues} across {files_with_issues} files")
+    print(f"Directory status: {'PASS' if not total_issues else 'WARNINGS'}")
+    return 0
+
+
 def main(argv=None):
     args = parse_args(sys.argv[1:] if argv is None else list(argv))
     path = Path(args.file).expanduser()
+    if path.is_dir():
+        return analyze_directory(path, args)
     if not path.is_file():
         print(f"Error: input file not found: {path}", file=sys.stderr)
         return 2
