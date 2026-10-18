@@ -72,19 +72,21 @@
 ;;                new_color if 'old_color'  (only case we have values ready, else switch back to pixel check)
 ;;                fall back to pixel checking in doubt, exit subLoop if right end of drawn line is reached or passed
 ;;
+;; Comment on stack size
+;;    A memory buffer is set to store next points to check above and below vurrent line.
+;;    By default this is a 30 points storage using 3 Bytes each, 90 Bytes.
+;;    If area to fill has a lot of different vertical area to fill
+;;    the algorithm will need all this area. The algorithm stops adding points if 
+;;    buffer is filled. So some area will not be checked and some area may miss in result.
+;;    A simple rectangular area just need 2 points.
+;;    If you know how many elements in stacks you need, you can adjust 
+;;    the STACK_SIZE value to your need and recompile cpctelera to decrease memory need.
+;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; (start code)
 ;; Required memory:
 ;;    571 bytes core routine  + 115 bytes data (+ 3 binding c overhead)
 ;;
-;; Time Measures (+10 binding overhead):
-;;    Case                                      | microSecs (us) | CPU Cycles
-;;   ---------------------------------------------------------------------------------
-;;    (10,20),(30,40)     in  (0 intersect)     | XXX            | XXX
-;;    (-10,-20),(330,240) in  (4 intersect)     | XXX            | XXX
-;;    (-10,20),(-30,40)   out (0 intersect)     | XXX            | XXX
-;;    (-10,-20),(30,-40)  out (1 intersect)     | XXX            | XXX
-;;   ---------------------------------------------------------------------------------
 ;; (end code)
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

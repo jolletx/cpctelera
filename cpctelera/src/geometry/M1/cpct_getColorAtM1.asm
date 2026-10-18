@@ -46,11 +46,11 @@
 ;; Required memory:
 ;;    44 bytes (41 bytes core routine + 3 bytes binding wrapper)
 ;;
-;; Time Measures (+10 us for c binding wrapper):
+;; Time Measures (+10 us for c binding wrapper) + call to cpct_getScreenPtr_asm (42us):
 ;;    Case                               | microSecs (us) | CPU Cycles
 ;;   ---------------------------------------------------------------------------------
-;;    Get color 0 on a subPixel 0        | XX             | XX
-;;    Get color 3 on a subPixel 3        | XX             | XX
+;;    Get color 0 on a subPixel 0        | 46             | 184
+;;    Get color 3 on a subPixel 3        | 64             | 256
 ;; (end code)
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
