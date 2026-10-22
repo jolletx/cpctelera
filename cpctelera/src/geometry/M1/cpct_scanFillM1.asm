@@ -85,7 +85,23 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; (start code)
 ;; Required memory:
-;;    571 bytes core routine  + 115 bytes data (+ 3 binding c overhead)
+;;    571 bytes core routine  + 115 bytes data (+ 3 c binding overhead)
+;;
+;; Test measure: 
+;;    Screen set to color 0
+;;    4 points:
+;;       pt1 (100,100) pt2 (125,75) pt3 (150,100) pt4 (125,125)
+;;    4 lines of color 2 between:
+;;       pt1,pt2  pt2,pt3 pt3,pt4 pt4,pt1
+;;    Time to fill from pt (125,100) with color 3
+;;
+;;  AI computation: 
+;;  Totals and assumptions
+;;    Pixels drawn: 1,201
+;;    Estimated drawing work: about 28,300 NOPs
+;;    Estimated above/below checks and point-queue costs: about 51,400 NOPs
+;;  Estimated overall: 
+;;    about 80,000 NOPs, including roughly 30 NOPs for the initial screen-pointer helper and the documented 10-NOP C-binding overhead; allow a few hundred more for setup.
 ;;
 ;; (end code)
 ;;

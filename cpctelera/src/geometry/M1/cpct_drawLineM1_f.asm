@@ -61,7 +61,7 @@
 ;;    AF, BC, DE, HL, AF', BC', DE', HL'
 ;;
 ;; Required memory:
-;;    1196 bytes (1150 bytes routine + 20 bytes data + 26 bytes binding wrapper)
+;;    1196 bytes (1792 bytes routine + 21 bytes data + 26 bytes binding wrapper)
 ;;
 ;; Time Measures (Includes +34 us / +136 CPU cycles binding wrapper overhead):
 ;; (start code)
@@ -69,7 +69,7 @@
 ;;   ---------------------------------------------------------------------------------
 ;;    Setup Overhead (routine + binding)       | -      | ~68            | ~272
 ;;    Single Point  (50,50) to (50,50) [Fast]  | 1      | 214            | 856
-;;    Horizontal    (0,0)   to (100,0) [Fast]  | 101    | XXX            | XXX
+;;    Horizontal    (0,0)   to (100,0) [Fast]  | 101    | 344            | 1376
 ;;    Vertical      (0,0)   to (0,100) [Fast]  | 101    | 1730           | 6920
 ;;    Shallow Slope (0,0)   to (100,25)        | 101    | ~3450          | ~13800
 ;;    Diagonal 45°  (0,0)   to (100,100)       | 101    | ~3875          | ~15500
@@ -145,7 +145,7 @@ single_draw:
     ld    c, l                    ;; [1] C = byte column
     ld    a, (y0_val)             ;; [4] A = Y0 coordinate
     ld    b, a                    ;; [1] B = Y0 coordinate
-    ld    de, (screen_start)      ;; [5] DE = base VRAM address
+    ld    de, (screen_start)      ;; [6] DE = base VRAM address
     call  cpct_getScreenPtr_asm   ;; [5] Call VRAM pointer helper
     pop   af                      ;; [3] Restore pixel offset into A
     ld    c, a                    ;; [1] C = pixel offset for h_plot_one
@@ -353,7 +353,7 @@ v_order_ok:
     ld    c, l                    ;; [1] C = X_byte
 v_ystart_op:
     ld    b, #0x00                ;; [2] B = Y_start (SMC patched)
-    ld    de, (screen_start)      ;; [5] DE = base VRAM address
+    ld    de, (screen_start)      ;; [6] DE = base VRAM address
     call  cpct_getScreenPtr_asm   ;; [5] HL = VRAM start address
     ld    de, #0x0800             ;; [3] DE = intra-block scanline step (+0x0800)
 v_count_op:
@@ -414,7 +414,7 @@ normal_draw:
     ex    de, hl                  ;; [1] DE = X0, HL = Y0
     pop   hl                      ;; [3] HL = X1 coordinate
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = signed DX = X1 - X0
+    sbc   hl, de                  ;; [4] HL = signed DX = X1 - X0
     ld    e, a                    ;; [1] E = Y0
     pop   bc                      ;; [3] B = color, C = Y1
     jr    nz, check_dy            ;; [2/3] IF DX != 0 THEN jump check_dy
@@ -477,7 +477,7 @@ dy_abs_ready:
     ld    c, l                    ;; [1] C = X_byte
     ld    a, (y0_val)             ;; [4] A = Y0
     ld    b, a                    ;; [1] B = Y0
-    ld    de, (screen_start)      ;; [5] DE = base VRAM address
+    ld    de, (screen_start)      ;; [6] DE = base VRAM address
     call  cpct_getScreenPtr_asm   ;; [5] HL = VRAM address
     ld    (screen_ptr_val), hl    ;; [5] Store computed initial VRAM pointer
     pop   hl                      ;; [3] Restore X0
@@ -506,7 +506,7 @@ dy_abs_ready:
     ld    hl, (abs_dx)            ;; [5] HL = |DX|
     ld    bc, (abs_dy)            ;; [6] BC = |DY|
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, bc                  ;; [3] Compare |DX| and |DY|
+    sbc   hl, bc                  ;; [4] Compare |DX| and |DY|
     jp    c, is_steep_8way        ;; [3] IF |DX| < |DY| THEN Steep path
 
 is_gentle_8way:
@@ -555,12 +555,12 @@ setup_grd:
     ld    a, h                    ;; [1] A = high byte of 2*DY
     ld    (grd_nostep_hi), a      ;; [4] Patch high byte of delta nostep
 
-    ld    de, (abs_dx)            ;; [5] DE = DX
+    ld    de, (abs_dx)            ;; [6] DE = DX
     ex    de, hl                  ;; [1] HL = DX, DE = 2*DY
     add   hl, hl                  ;; [3] HL = 2 * DX
     ex    de, hl                  ;; [1] HL = 2*DY, DE = 2*DX
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = 2*(DY - DX) (Delta Step)
+    sbc   hl, de                  ;; [4] HL = 2*(DY - DX) (Delta Step)
     ld    a, l                    ;; [1] A = low byte of delta step
     ld    (grd_step_lo), a        ;; [4] Patch low byte of delta step
     ld    a, h                    ;; [1] A = high byte of delta step
@@ -568,9 +568,9 @@ setup_grd:
 
     ld    hl, (abs_dy)            ;; [5] HL = DY
     add   hl, hl                  ;; [3] HL = 2 * DY
-    ld    de, (abs_dx)            ;; [5] DE = DX
+    ld    de, (abs_dx)            ;; [6] DE = DX
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = Err0 = 2*DY - DX
+    sbc   hl, de                  ;; [4] HL = Err0 = 2*DY - DX
 
     ld    bc, (abs_dx)            ;; [6] BC = DX
     inc   bc                      ;; [2] BC = DX + 1 (total pixel count)
@@ -579,7 +579,7 @@ setup_grd:
     pop   bc                      ;; [3] BC' = total pixel count
     exx                           ;; [1] Switch back to main register set
 
-    ld    de, (screen_ptr_val)    ;; [5] DE = initial VRAM pointer
+    ld    de, (screen_ptr_val)    ;; [6] DE = initial VRAM pointer
     ld    a, (cur_mask)           ;; [4] A = initial background mask
     ld    b, a                    ;; [1] B = initial mask
     ld    a, (cur_col)            ;; [4] A = initial color byte
@@ -663,12 +663,12 @@ setup_gld:
     ld    a, h                    ;; [1] A = high byte of 2*DY
     ld    (gld_nostep_hi), a      ;; [4] Patch high byte of delta nostep
 
-    ld    de, (abs_dx)            ;; [5] DE = DX
+    ld    de, (abs_dx)            ;; [6] DE = DX
     ex    de, hl                  ;; [1] HL = DX, DE = 2*DY
     add   hl, hl                  ;; [3] HL = 2 * DX
     ex    de, hl                  ;; [1] HL = 2*DY, DE = 2*DX
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = 2*(DY - DX) (Delta Step)
+    sbc   hl, de                  ;; [4] HL = 2*(DY - DX) (Delta Step)
     ld    a, l                    ;; [1] A = low byte of delta step
     ld    (gld_step_lo), a        ;; [4] Patch low byte of delta step
     ld    a, h                    ;; [1] A = high byte of delta step
@@ -676,9 +676,9 @@ setup_gld:
 
     ld    hl, (abs_dy)            ;; [5] HL = DY
     add   hl, hl                  ;; [3] HL = 2 * DY
-    ld    de, (abs_dx)            ;; [5] DE = DX
+    ld    de, (abs_dx)            ;; [6] DE = DX
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = Err0 = 2*DY - DX
+    sbc   hl, de                  ;; [4] HL = Err0 = 2*DY - DX
 
     ld    bc, (abs_dx)            ;; [6] BC = DX
     inc   bc                      ;; [2] BC = DX + 1 (total pixel count)
@@ -687,7 +687,7 @@ setup_gld:
     pop   bc                      ;; [3] BC' = total pixel count
     exx                           ;; [1] Switch back to main register set
 
-    ld    de, (screen_ptr_val)    ;; [5] DE = initial VRAM pointer
+    ld    de, (screen_ptr_val)    ;; [6] DE = initial VRAM pointer
     ld    a, (cur_mask)           ;; [4] A = initial background mask
     ld    b, a                    ;; [1] B = initial mask
     ld    a, (cur_col)            ;; [4] A = initial color byte
@@ -770,12 +770,12 @@ setup_gru:
     ld    a, h                    ;; [1] A = high byte of 2*DY
     ld    (gru_nostep_hi), a      ;; [4] Patch high byte of delta nostep
 
-    ld    de, (abs_dx)            ;; [5] DE = DX
+    ld    de, (abs_dx)            ;; [6] DE = DX
     ex    de, hl                  ;; [1] HL = DX, DE = 2*DY
     add   hl, hl                  ;; [3] HL = 2 * DX
     ex    de, hl                  ;; [1] HL = 2*DY, DE = 2*DX
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = 2*(DY - DX) (Delta Step)
+    sbc   hl, de                  ;; [4] HL = 2*(DY - DX) (Delta Step)
     ld    a, l                    ;; [1] A = low byte of delta step
     ld    (gru_step_lo), a        ;; [4] Patch low byte of delta step
     ld    a, h                    ;; [1] A = high byte of delta step
@@ -783,9 +783,9 @@ setup_gru:
 
     ld    hl, (abs_dy)            ;; [5] HL = DY
     add   hl, hl                  ;; [3] HL = 2 * DY
-    ld    de, (abs_dx)            ;; [5] DE = DX
+    ld    de, (abs_dx)            ;; [6] DE = DX
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = Err0 = 2*DY - DX
+    sbc   hl, de                  ;; [4] HL = Err0 = 2*DY - DX
 
     ld    bc, (abs_dx)            ;; [6] BC = DX
     inc   bc                      ;; [2] BC = DX + 1 (total pixel count)
@@ -794,7 +794,7 @@ setup_gru:
     pop   bc                      ;; [3] BC' = total pixel count
     exx                           ;; [1] Switch back to main register set
 
-    ld    de, (screen_ptr_val)    ;; [5] DE = initial VRAM pointer
+    ld    de, (screen_ptr_val)    ;; [6] DE = initial VRAM pointer
     ld    a, (cur_mask)           ;; [4] A = initial background mask
     ld    b, a                    ;; [1] B = initial mask
     ld    a, (cur_col)            ;; [4] A = initial color byte
@@ -880,12 +880,12 @@ setup_glu:
     ld    a, h                    ;; [1] A = high byte of 2*DY
     ld    (glu_nostep_hi), a      ;; [4] Patch high byte of delta nostep
 
-    ld    de, (abs_dx)            ;; [5] DE = DX
+    ld    de, (abs_dx)            ;; [6] DE = DX
     ex    de, hl                  ;; [1] HL = DX, DE = 2*DY
     add   hl, hl                  ;; [3] HL = 2 * DX
     ex    de, hl                  ;; [1] HL = 2*DY, DE = 2*DX
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = 2*(DY - DX) (Delta Step)
+    sbc   hl, de                  ;; [4] HL = 2*(DY - DX) (Delta Step)
     ld    a, l                    ;; [1] A = low byte of delta step
     ld    (glu_step_lo), a        ;; [4] Patch low byte of delta step
     ld    a, h                    ;; [1] A = high byte of delta step
@@ -893,9 +893,9 @@ setup_glu:
 
     ld    hl, (abs_dy)            ;; [5] HL = DY
     add   hl, hl                  ;; [3] HL = 2 * DY
-    ld    de, (abs_dx)            ;; [5] DE = DX
+    ld    de, (abs_dx)            ;; [6] DE = DX
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = Err0 = 2*DY - DX
+    sbc   hl, de                  ;; [4] HL = Err0 = 2*DY - DX
 
     ld    bc, (abs_dx)            ;; [6] BC = DX
     inc   bc                      ;; [2] BC = DX + 1 (total pixel count)
@@ -904,7 +904,7 @@ setup_glu:
     pop   bc                      ;; [3] BC' = total pixel count
     exx                           ;; [1] Switch back to main register set
 
-    ld    de, (screen_ptr_val)    ;; [5] DE = initial VRAM pointer
+    ld    de, (screen_ptr_val)    ;; [6] DE = initial VRAM pointer
     ld    a, (cur_mask)           ;; [4] A = initial background mask
     ld    b, a                    ;; [1] B = initial mask
     ld    a, (cur_col)            ;; [4] A = initial color byte
@@ -990,12 +990,12 @@ setup_srd:
     ld    a, h                    ;; [1] A = high byte of 2*DX
     ld    (srd_nostep_hi), a      ;; [4] Patch high byte of delta nostep
 
-    ld    de, (abs_dy)            ;; [5] DE = DY
+    ld    de, (abs_dy)            ;; [6] DE = DY
     ex    de, hl                  ;; [1] HL = DY, DE = 2*DX
     add   hl, hl                  ;; [3] HL = 2 * DY
     ex    de, hl                  ;; [1] HL = 2*DX, DE = 2*DY
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = 2*(DX - DY) (Delta Step)
+    sbc   hl, de                  ;; [4] HL = 2*(DX - DY) (Delta Step)
     ld    a, l                    ;; [1] A = low byte of delta step
     ld    (srd_step_lo), a        ;; [4] Patch low byte of delta step
     ld    a, h                    ;; [1] A = high byte of delta step
@@ -1003,9 +1003,9 @@ setup_srd:
 
     ld    hl, (abs_dx)            ;; [5] HL = DX
     add   hl, hl                  ;; [3] HL = 2 * DX
-    ld    de, (abs_dy)            ;; [5] DE = DY
+    ld    de, (abs_dy)            ;; [6] DE = DY
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = Err0 = 2*DX - DY
+    sbc   hl, de                  ;; [4] HL = Err0 = 2*DX - DY
 
     ld    bc, (abs_dy)            ;; [6] BC = DY
     inc   bc                      ;; [2] BC = DY + 1 (total pixel count)
@@ -1014,7 +1014,7 @@ setup_srd:
     pop   bc                      ;; [3] BC' = total pixel count
     exx                           ;; [1] Switch back to main register set
 
-    ld    de, (screen_ptr_val)    ;; [5] DE = initial VRAM pointer
+    ld    de, (screen_ptr_val)    ;; [6] DE = initial VRAM pointer
     ld    a, (cur_mask)           ;; [4] A = initial background mask
     ld    b, a                    ;; [1] B = initial mask
     ld    a, (cur_col)            ;; [4] A = initial color byte
@@ -1096,12 +1096,12 @@ setup_sld:
     ld    a, h                    ;; [1] A = high byte of 2*DX
     ld    (sld_nostep_hi), a      ;; [4] Patch high byte of delta nostep
 
-    ld    de, (abs_dy)            ;; [5] DE = DY
+    ld    de, (abs_dy)            ;; [6] DE = DY
     ex    de, hl                  ;; [1] HL = DY, DE = 2*DX
     add   hl, hl                  ;; [3] HL = 2 * DY
     ex    de, hl                  ;; [1] HL = 2*DX, DE = 2*DY
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = 2*(DX - DY) (Delta Step)
+    sbc   hl, de                  ;; [4] HL = 2*(DX - DY) (Delta Step)
     ld    a, l                    ;; [1] A = low byte of delta step
     ld    (sld_step_lo), a        ;; [4] Patch low byte of delta step
     ld    a, h                    ;; [1] A = high byte of delta step
@@ -1109,9 +1109,9 @@ setup_sld:
 
     ld    hl, (abs_dx)            ;; [5] HL = DX
     add   hl, hl                  ;; [3] HL = 2 * DX
-    ld    de, (abs_dy)            ;; [5] DE = DY
+    ld    de, (abs_dy)            ;; [6] DE = DY
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = Err0 = 2*DX - DY
+    sbc   hl, de                  ;; [4] HL = Err0 = 2*DX - DY
 
     ld    bc, (abs_dy)            ;; [6] BC = DY
     inc   bc                      ;; [2] BC = DY + 1 (total pixel count)
@@ -1120,7 +1120,7 @@ setup_sld:
     pop   bc                      ;; [3] BC' = total pixel count
     exx                           ;; [1] Switch back to main register set
 
-    ld    de, (screen_ptr_val)    ;; [5] DE = initial VRAM pointer
+    ld    de, (screen_ptr_val)    ;; [6] DE = initial VRAM pointer
     ld    a, (cur_mask)           ;; [4] A = initial background mask
     ld    b, a                    ;; [1] B = initial mask
     ld    a, (cur_col)            ;; [4] A = initial color byte
@@ -1202,12 +1202,12 @@ setup_sru:
     ld    a, h                    ;; [1] A = high byte of 2*DX
     ld    (sru_nostep_hi), a      ;; [4] Patch high byte of delta nostep
 
-    ld    de, (abs_dy)            ;; [5] DE = DY
+    ld    de, (abs_dy)            ;; [6] DE = DY
     ex    de, hl                  ;; [1] HL = DY, DE = 2*DX
     add   hl, hl                  ;; [3] HL = 2 * DY
     ex    de, hl                  ;; [1] HL = 2*DX, DE = 2*DY
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = 2*(DX - DY) (Delta Step)
+    sbc   hl, de                  ;; [4] HL = 2*(DX - DY) (Delta Step)
     ld    a, l                    ;; [1] A = low byte of delta step
     ld    (sru_step_lo), a        ;; [4] Patch low byte of delta step
     ld    a, h                    ;; [1] A = high byte of delta step
@@ -1215,9 +1215,9 @@ setup_sru:
 
     ld    hl, (abs_dx)            ;; [5] HL = DX
     add   hl, hl                  ;; [3] HL = 2 * DX
-    ld    de, (abs_dy)            ;; [5] DE = DY
+    ld    de, (abs_dy)            ;; [6] DE = DY
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = Err0 = 2*DX - DY
+    sbc   hl, de                  ;; [4] HL = Err0 = 2*DX - DY
 
     ld    bc, (abs_dy)            ;; [6] BC = DY
     inc   bc                      ;; [2] BC = DY + 1 (total pixel count)
@@ -1226,7 +1226,7 @@ setup_sru:
     pop   bc                      ;; [3] BC' = total pixel count
     exx                           ;; [1] Switch back to main register set
 
-    ld    de, (screen_ptr_val)    ;; [5] DE = initial VRAM pointer
+    ld    de, (screen_ptr_val)    ;; [6] DE = initial VRAM pointer
     ld    a, (cur_mask)           ;; [4] A = initial background mask
     ld    b, a                    ;; [1] B = initial mask
     ld    a, (cur_col)            ;; [4] A = initial color byte
@@ -1311,12 +1311,12 @@ setup_slu:
     ld    a, h                    ;; [1] A = high byte of 2*DX
     ld    (slu_nostep_hi), a      ;; [4] Patch high byte of delta nostep
 
-    ld    de, (abs_dy)            ;; [5] DE = DY
+    ld    de, (abs_dy)            ;; [6] DE = DY
     ex    de, hl                  ;; [1] HL = DY, DE = 2*DX
     add   hl, hl                  ;; [3] HL = 2 * DY
     ex    de, hl                  ;; [1] HL = 2*DX, DE = 2*DY
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = 2*(DX - DY) (Delta Step)
+    sbc   hl, de                  ;; [4] HL = 2*(DX - DY) (Delta Step)
     ld    a, l                    ;; [1] A = low byte of delta step
     ld    (slu_step_lo), a        ;; [4] Patch low byte of delta step
     ld    a, h                    ;; [1] A = high byte of delta step
@@ -1324,9 +1324,9 @@ setup_slu:
 
     ld    hl, (abs_dx)            ;; [5] HL = DX
     add   hl, hl                  ;; [3] HL = 2 * DX
-    ld    de, (abs_dy)            ;; [5] DE = DY
+    ld    de, (abs_dy)            ;; [6] DE = DY
     or    a                       ;; [1] Clear carry flag
-    sbc   hl, de                  ;; [3] HL = Err0 = 2*DX - DY
+    sbc   hl, de                  ;; [4] HL = Err0 = 2*DX - DY
 
     ld    bc, (abs_dy)            ;; [6] BC = DY
     inc   bc                      ;; [2] BC = DY + 1 (total pixel count)
@@ -1335,7 +1335,7 @@ setup_slu:
     pop   bc                      ;; [3] BC' = total pixel count
     exx                           ;; [1] Switch back to main register set
 
-    ld    de, (screen_ptr_val)    ;; [5] DE = initial VRAM pointer
+    ld    de, (screen_ptr_val)    ;; [6] DE = initial VRAM pointer
     ld    a, (cur_mask)           ;; [4] A = initial background mask
     ld    b, a                    ;; [1] B = initial mask
     ld    a, (cur_col)            ;; [4] A = initial color byte
