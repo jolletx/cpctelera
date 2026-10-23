@@ -20,6 +20,7 @@
 
 ;; Macros for easy use of undocumented opcodes
 .include "macros/cpct_undocumentedOpcodes.h.s"
+.include "macros/cpct_opcodeConstants.h.s"
 
 ;;
 ;; ASM / C bindings for <cpct_drawLineM1_f>
