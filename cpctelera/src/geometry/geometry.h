@@ -22,22 +22,30 @@
 //#####################################################################
 //### This module contains several functions and routines to manage ###
 //### geometric primitives                                          ###
-//### Coordonites M1:                                               ###
-//###    from 0,0   (Upper left corner of screen)                   ###
-//###    to 319,199 (bottom right)                                  ###
 //#####################################################################
 //
 
 #ifndef cpct_geometry_H
 #define cpct_geometry_H
 
+// Line clipping (all modes)
+extern void cpct_setClipRect(i16 xmin, i16 ymin, i16 xmax, i16 ymax) __z88dk_callee;
+extern u8   cpct_clipLine(i16* x0, i16* y0, i16* x1, i16* y1) __z88dk_callee;
+
 // Mode 1
-extern void cpct_drawLineM1_f  (u8* screen_start, u16 x0, u16 y0, u16 x1, u8 y1, u8 color) __z88dk_callee;
-extern void cpct_drawLineM1    (u8* screen_start, u16 x0, u16 y0, u16 x1, u8 y1, u8 color) __z88dk_callee;
-extern void cpct_drawPlotM1    (u8* screen_start, u16 x, u8 y, u8 color) __z88dk_callee;
-extern void cpct_drawCircleM1  (u8* vmem, u16 centerx, u16 centery, u8 radius, u8 color) __z88dk_callee;
-extern u8   cpct_getColorAtM1  (u8* vmem, u16 x, u16 y) __z88dk_callee;
-extern void cpct_scanFillM1    (u8* vmem, u16 x, u8 y, u8 newColor) __z88dk_callee;
-extern u8   cpct_clampLineM1   (i16 *ioPt1, i16 *ioPt2);
+extern void cpct_drawLineM1_f(u8* screen_start, u16 x0, u16 y0, u16 x1, u8 y1, u8 color) __z88dk_callee;
+extern void cpct_drawLineM1  (u8* screen_start, u16 x0, u16 y0, u16 x1, u8 y1, u8 color) __z88dk_callee;
+extern void cpct_drawPlotM1  (u8* screen_start, u16 x, u8 y, u8 color) __z88dk_callee;
+extern void cpct_drawCircleM1(u8* vmem, u16 centerx, u16 centery, u8 radius, u8 color) __z88dk_callee;
+extern void cpct_scanFillM1  (u8* vmem, u16 x, u8 y, u8 newColor) __z88dk_callee;
+extern u8   cpct_getColorAtM1(u8* vmem, u16 x, u16 y) __z88dk_callee;
+
+// Mode 0
+extern void cpct_drawLineM0_f(u8* screen_start, u16 x0, u16 y0, u16 x1, u8 y1, u8 color) __z88dk_callee;
+extern void cpct_drawLineM0  (u8* screen_start, u16 x0, u16 y0, u16 x1, u8 y1, u8 color) __z88dk_callee;
+extern void cpct_drawPlotM0  (u8* screen_start, u16 x, u8 y, u8 color) __z88dk_callee;
+extern void cpct_drawCircleM0(u8* vmem, u16 centerx, u16 centery, u8 radius, u8 color) __z88dk_callee;
+// extern void cpct_scanFillM0  (u8* vmem, u16 x, u8 y, u8 newColor) __z88dk_callee;
+extern u8   cpct_getColorAtM0(u8* vmem, u16 x, u16 y) __z88dk_callee;
 
 #endif
