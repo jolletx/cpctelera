@@ -302,6 +302,7 @@ void SpeedTestM1(void)
 			cpct_drawPlotM1(CPCT_VMEM_START, x+XOFFSETM1, y,col);
 		}
 	}
+	cpct_scanKeyboard_f();
 	while (!cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
 	while (cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();    
 }
@@ -312,8 +313,13 @@ void SpeedTestM0(void)
 {
 	// Circles (radius in lines, Mode 0 circles are corrected to look round)
 	cpct_drawCircleM0(CPCT_VMEM_START, 80, 100, 20, 12);
-	cpct_drawCircleM0(CPCT_VMEM_START, 80, 100, 21, 13);
-	cpct_drawCircleM0(CPCT_VMEM_START, 80, 100, 22, 14);
+	cpct_drawCircleM0(CPCT_VMEM_START, 80, 100, 15, 13);
+	cpct_drawCircleM0(CPCT_VMEM_START, 80, 100, 10, 14);
+
+	// Fill circles
+	cpct_scanFillM0 (CPCT_VMEM_START, 61, 100, 14);
+    cpct_scanFillM0 (CPCT_VMEM_START, 66, 100, 13);
+	cpct_scanFillM0 (CPCT_VMEM_START, 71, 100, 12);
 
 	// Constants dx/N = 160/40 = 4 | dy/N = 200/40 = 5
 	i16 x,y;
@@ -377,6 +383,7 @@ void SpeedTestM0(void)
 			cpct_drawPlotM0(CPCT_VMEM_START, x+XOFFSETM0, y, col);
 		}
 	}
+	cpct_scanKeyboard_f();
 	while (!cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
 	while (cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
 }
