@@ -18,5 +18,10 @@
 ;;-------------------------------------------------------------------------------
 .module cpct_geometry
 
+;;
+;; ASM bindings for <cpct_getColorAtM1>
+;;
+;;  0 microSecs, 0 bytes
+;;
 cpct_getColorAtM1_asm::
 .include  /cpct_getColorAtM1.asm/

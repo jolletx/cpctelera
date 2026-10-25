@@ -18,7 +18,17 @@
 ;;-------------------------------------------------------------------------------
 .module cpct_geometry
 
+;;
+;; C bindings for <cpct_getColorAtM1>
+;;
+;;  10 microSecs, 3 bytes
+;;
 _cpct_getColorAtM1::
+   ;; Parameters retrieval from registers
+   ;; HL = vmem
+   ;; DE = x
+
+  ;; Parameters retrieval from stack
    pop  af                     ;; [3] af = Return address
    pop  bc                     ;; [3] bc = y  (b should be 0  )
    push af                     ;; [4] Restore return address to stack because __z88dk_callee

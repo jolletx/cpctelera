@@ -18,8 +18,13 @@
 ;;-------------------------------------------------------------------------------
 .module cpct_geometry
 
-.include \../cpct_geomConstants.h.s\
+.include "../cpct_geomConstants.h.s"
 
+;;
+;; ASM bindings for <cpct_scanFillM1>
+;;
+;;  0 microSecs, 0 bytes
+;;
 cpct_scanFillM1_asm::
 
-.include  /cpct_scanFillM1.asm/
+.include  "cpct_scanFillM1.asm"

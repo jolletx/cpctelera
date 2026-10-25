@@ -18,11 +18,21 @@
 ;;-------------------------------------------------------------------------------
 .module cpct_geometry
 
-.include \../cpct_geomConstants.h.s\
+.include "../cpct_geomConstants.h.s"
 
+;;
+;; C bindings for <cpct_scanFillM1>
+;;
+;;  10 microSecs, 3 bytes
+;;
 _cpct_scanFillM1::
+   ;; Parameters retrieval from registers
+   ;; HL = vmem
+   ;; DE = x
+
+  ;; Parameters retrieval from stack
    pop af                      ;; [3] af = Return addressc
    pop bc                      ;; [3] c = y  / b = newColor
    push af                     ;; [4] Restore return address to stack because __z88dk_callee
 
-.include  /cpct_scanFillM1.asm/
+.include  "cpct_scanFillM1.asm"
