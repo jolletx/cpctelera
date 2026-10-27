@@ -312,14 +312,14 @@ void SpeedTestM1(void)
 void SpeedTestM0(void)
 {
 	// Circles (radius in lines, Mode 0 circles are corrected to look round)
-	cpct_drawCircleM0(CPCT_VMEM_START, 80, 100, 20, 12);
-	cpct_drawCircleM0(CPCT_VMEM_START, 80, 100, 15, 13);
-	cpct_drawCircleM0(CPCT_VMEM_START, 80, 100, 10, 14);
+	cpct_drawCircleM0(CPCT_VMEM_START, 80, 100, 30, 12);
+	cpct_drawCircleM0(CPCT_VMEM_START, 80, 100, 20, 13);
+	cpct_drawCircleM0(CPCT_VMEM_START, 80, 100, 10, 15);
 
-	// Fill circles
-	cpct_scanFillM0 (CPCT_VMEM_START, 61, 100, 14);
-    cpct_scanFillM0 (CPCT_VMEM_START, 66, 100, 13);
-	cpct_scanFillM0 (CPCT_VMEM_START, 71, 100, 12);
+	// Fill circles - Warning radius = radius /2 on X
+	cpct_scanFillM0 (CPCT_VMEM_START, 66, 100, 15);
+    cpct_scanFillM0 (CPCT_VMEM_START, 71, 100, 13);
+	cpct_scanFillM0 (CPCT_VMEM_START, 76, 100, 12);
 
 	// Constants dx/N = 160/40 = 4 | dy/N = 200/40 = 5
 	i16 x,y;

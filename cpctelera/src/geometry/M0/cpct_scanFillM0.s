@@ -72,28 +72,29 @@
 ;;
 ;; (start code)
 ;; Required memory:
-;;    571 bytes core routine  + 115 bytes data (+ 3 c binding overhead)
+;;    550 bytes core routine  + 81 bytes data (+ 3 c binding overhead)
 ;;
 ;; Test measure: 
 ;;    Screen set to color 0
 ;;    4 points:
-;;       pt1 (100,100) pt2 (125,75) pt3 (150,100) pt4 (125,125)
+;;       pt1 (80,100) pt2 (125,75) pt3 (150,100) pt4 (125,125)
 ;;    4 lines of color 2 between:
 ;;       pt1,pt2  pt2,pt3 pt3,pt4 pt4,pt1
 ;;    Time to fill from pt (125,100) with color 3
 ;;
-;;  Totals and assumptions:
+;;  Totals and assumptions (approximate):
 ;;    Pixels drawn: 1,201
-;;    Estimated drawing work: about 28,300 NOPs
-;;    Estimated above/below checks and point-queue costs: about 51,400 NOPs
-;;  Estimated overall: 
-;;    about 80,000 NOPs, including roughly 30 NOPs for the initial screen-pointer helper and the documented 10-NOP C-binding overhead; allow a few hundred more for setup.
+;;    Drawing work: 1,201 pixels at an average of about 23.6 NOPs/pixel = 28,300 NOPs
+;;    Above/below checks and point-queue work: about 42.8 NOPs/pixel = 51,400 NOPs
+;;    Core total: 28,300 + 51,400 = 79,700 NOPs
+;;  Estimated overall:
+;;    79,700 NOPs plus roughly 30 NOPs for the initial screen-pointer helper
+;;    and 10 NOPs for the C-binding overhead = 79,740 NOPs; round to about
+;;    80,000 NOPs, allowing a few hundred more for setup.
 ;; (end code)
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-.globl cpct_plotColorTable_M1
-.globl cpct_plotMasksTable_M1
 .globl cpct_getScreenPtr_asm
 
 .include "../cpct_geomConstants.h.s"
@@ -141,32 +142,24 @@ pt_stack:                        ;; Stack of points to fill horizontaly
 
 _cpct_scanFillM0::
    ;; Parameters retrieval from registers
-   ;; HL = vmem
-   ;; DE = x
+   ;; HL = vmem - DE = x
 
   ;; Parameters retrieval from stack
-   pop af                      ;; [3] af = Return addressc
-   pop bc                      ;; [3] c = y  / b = newColor
-   push af                     ;; [4] Restore return address to stack because __z88dk_callee
+   pop   af                      ;; [3] af = Return addressc
+   pop   bc                      ;; [3] c = y  / b = newColor
+   push  af                      ;; [4] Restore return address to stack because __z88dk_callee
 
 cpct_scanFillM0_asm::
-   ;  HL = VMEM start ptr
-   ;  DE = X
-   ;  C  = Y
-   ;  B  = New Color 
-
-  ;  HL = VMEM start ptr
-   ;  DE = X
-   ;  C  = Y
-   ;  B  = New Color 
+   ;;  Inputs: HL = VMEM start ptr - DE = X - C  = Y - B  = New Color 
 
    ld    (screen_start),hl       ;; [5] Store VMem start
    ld    a,c                     ;; [1] A = Y coord
    ld    (cur_y_val),a           ;; [4] Store Y value
 
    ;; Compute new color values
-   ;; compute sub pixel 1 - Assuming d=0 because X < 256 - B = 0 0 0 0 b3 b2 b1 b0
-   ;; Need to compute A = 0 b0 0 b2 0 b1 0 b3
+   ;; compute sub pixel 1 - Assuming d=0 because DE < 160 - 
+   ;; Input color (0..15)  B = 0  0  0  0  b3 b2 b1 b0
+   ;; Need to compute      A = 0  b0 0  b2 0  b1 0  b3
    xor   a                       ;; [1] A =  0  0  0  0  0  0  0  0  CF=0
    srl   b                       ;; [2] B =  0  0  0  0  0  b3 b2 b1 CF=b0
    rla                           ;; [1] A =  0  0  0  0  0  0  0  b0 CF=0  
@@ -184,13 +177,13 @@ cpct_scanFillM0_asm::
 
    ld    (new_color+1),a         ;; [4] Stores subpixel 1 new color
    ld    b,a                     ;; [1] B = subpixel 1
-   rlca                          ;; [2] Rotate copy Carry - A = Subpixel 0
+   rlca                          ;; [1] Rotate copy Carry - A = Subpixel 0
    ld    (new_color),a           ;; [4] Stores subpixel 0 new color
    or    b                       ;; [1] A = full octet of new_color
    ld    (new_color_full),a      ;; [4] Stores full_octet  
 
    ;; Compute Screen adress and sub pixel offset from X,Y
-   xor   a
+   xor   a                       ;; [1] A = 0
    srl   e                       ;; [2] E = byte offset , CF = subpixel
    rla                           ;; [1] A = subpixel
    ld    (cur_subpixel),a        ;; [4] Store subpixel
@@ -210,14 +203,14 @@ cpct_scanFillM0_asm::
 storeOldCol:
    and   #0xAA                   ;; [2] Masks subpixel 0
    ld    hl,#old_color           ;; [3] hl = adress of old_color
-   ld    (hl),a                  ;; [4] Stores subpixel 0 
-   inc   hl                      ;; [1] points old_color+1 = subpixel 1
+   ld    (hl),a                  ;; [2] Stores subpixel 0 
+   inc   hl                      ;; [2] points old_color+1 = subpixel 1
    ld    b,a                     ;; [1] B = subpixel 0
-   rrca                          ;; [2] Rotate copy Carry - A = Subpixel 1
-   ld    (hl),a                  ;; [4] Stores subpixel 1 
-   inc   hl                      ;; [1] Points old_color+2 = full octet
+   rrca                          ;; [1] Rotate copy Carry - A = Subpixel 1
+   ld    (hl),a                  ;; [2] Stores subpixel 1 
+   inc   hl                      ;; [2] Points old_color+2 = full octet
    or    b                       ;; [1] A = sbp1 | sbp0 = full octet of old_color
-   ld    (hl),a                  ;; [4] Stores full_octet  
+   ld    (hl),a                  ;; [2] Stores full_octet  
 
    ld    hl,#new_color_full      ;; [3] hl = adress of new_color_full
    cp    (hl)                    ;; [2] Check if old_color == new_color
@@ -441,7 +434,7 @@ plotPixel::                       ;; Plot pixel D at (hl) in new_color
    ld    hl,#new_color           ;; [3] hl = adress of new color subpixel 0
    jr    z,pp_useMask            ;; [2/3] jr if subpixel 0
    rlca                          ;; [1] A = 0xAA = Mask to remove subpixel 1
-   inc   hl                      ;; [1] HL = adress of new_color subpixel 1 
+   inc   hl                      ;; [2] HL = adress of new_color subpixel 1 
 pp_useMask::
    ld    e,(hl)                  ;; [2] e = new_color subpixel
    pop   hl                      ;; [3] retrieve screen adress
@@ -480,18 +473,16 @@ checkOldColor::                  ;; Returns ZFlag ON if color of the pixel at (H
    ret   z                       ;; [2/4] If full octet is old_color ret ZFlag
 
    push  hl                      ;; [4] save screen adress
-   ; push  de                      ;; [4] save de
    ld    a,d                     ;; [1] A = subpixel
    or    a                       ;; [1] Check subpixel
-   ld    a,#0x55                 ;; [2] A = Mask to remove subpixel 0
-   ld    hl,#new_color           ;; [3] HL = adress of new_color subpixel 0
+   ld    a,#0xAA                 ;; [2] A = Mask to remove subpixel 0
+   ld    hl,#old_color           ;; [3] HL = adress of old_color subpixel 0
    jr    z,co_useMask            ;; [2/3] if subpixel 0 jump
-   inc   hl                      ;; [1] HL = adress of new_color subpixel 1
-   rlca                          ;; [1] A = 0xAA = remove Subpixel 1
+   inc   hl                      ;; [2] HL = adress of new_color subpixel 1
+   rrca                          ;; [1] A = 0x55 = remove Subpixel 1
 co_useMask:
    and   b                       ;; [1] a = masked screen octet
    xor   (hl)                    ;; [2] a = actual subpixel xor oldcolor pixel- ZFlag is set if A == (HL)
-   ; pop   de                      ;; [3] retrieve de
    pop   hl                      ;; [3] retrieve screen adress
    ret                           ;; [3] Z Flag is true if color found in pixel
 pushPoint::                       ;; Push point DE and C into stack - FZ not set : OK - FZ set : no more room
@@ -536,33 +527,12 @@ popPoint::                        ;; Pop point into DE and C from stack - No nee
    dec   hl                      ;; [2] Move up
    ld    e,(hl)                  ;; [2] E =  cooordinate
    srl   e                       ;; [2] E = byte offset, CF = subpixel
-   ld    d,#0                    ;; [1] D = 0
-   rl    d                       ;; [1] D = subpixel
+   ld    d,#0                    ;; [2] D = 0
+   rl    d                       ;; [2] D = subpixel
 	ld    (stack_adress),hl       ;; [5] Save new stack address
    or    #0x01                   ;; [2] reset Z flag
 
    ret                           ;; [3] return
-
-; storeColor:                      ;; Store color subpixels into HL - a = color of subpixel
-; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;    ld    b,a                     ;; [1] b = color for sub pixel 0
-;    ld   (hl),b                   ;; [2] Save color for sub pixel 0
-;    inc   hl                      ;; [2] next octet
-;    rrc   b                       ;; [2] Rotate B right to get color for sub pixel 1
-;    or    b                       ;; [1] A = A + color for sub pixel 1
-;    ld   (hl),b                   ;; [2] Save color for sub pixel 1
-;    inc   hl                      ;; [2] next octet
-;    rrc   b                       ;; [2] Rotate B right to get color for sub pixel 2
-;    or    b                       ;; [1] A = A + color for sub pixel 2
-;    ld   (hl),b                   ;; [2] Save color for sub pixel 2
-;    inc   hl                      ;; [2] next octet
-;    rrc   b                       ;; [2] Rotate B right to get color for sub pixel 3
-;    or    b                       ;; [1] A = A + color for sub pixel 3
-;    ld   (hl),b                   ;; [2] Save color for sub pixel 3
-;    inc   hl                      ;; [2] next octet (Full_octet)
-;    ld   (hl),a                   ;; [2] Save color full octet
-;    ret                           ;; [3] return and A contains full octet color
-
 changeYUp::
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
    ld    a,c                     ;; [1] a = c = Y value
@@ -603,7 +573,7 @@ dsp_changeXOffset:
 
 increaseSubpixel::
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   ld    a,d                     ;; [2] a = subpixel
+   ld    a,d                     ;; [1] a = subpixel
    or    a                       ;; [1] Compare subpixel with 3
    jr    nz,isp_changeXOffset    ;; [2/3] subpixel == 1, move to next octet
    inc   d                       ;; [1] increase subpixel (ZFlag cannot be set)
