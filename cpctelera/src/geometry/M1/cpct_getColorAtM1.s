@@ -16,8 +16,7 @@
 ;;  You should have received a copy of the GNU Lesser General Public License
 ;;  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;-------------------------------------------------------------------------------
-
-.globl cpct_getScreenPtr_asm
+.module cpct_geometry
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -58,7 +57,12 @@
 ;; (end code)
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+.globl cpct_getScreenPtr_asm
+_cpct_getColorAtM1::
+   pop  af                          ;; [3] af = Return address
+   pop  bc                          ;; [3] bc = y  (b should be 0  )
+   push af                          ;; [4] Restore return address to stack because __z88dk_callee
+cpct_getColorAtM1_asm::
     ld      a,e                     ;; [1] a = low X
     and     #0x03                   ;; [2] Keep only the 2 least significant bits of X0 : subPixel
 
@@ -74,9 +78,9 @@
 
     ld      a,#3                    ;; [2] Set a to max subpixel
     sub     b                       ;; [1] a = 3 - subpixel (0..3) = number of rlca to perform
-    ld      (smc_jpoverrlca),a      ;; [4] Modifies the JR reaching
+    ld      (smc_jpoverrlca),a      ;; [4] (SMC) Modifies the JR reaching
     ld      a,(hl)                  ;; [2] Get screen octet
-smc_jpoverrlca=.+1
+smc_jpoverrlca=.+1                  ;; (SMC) 
     jr      computeColor            ;; [3] Skip rotations for subpixel 0 (SMC)
     rlca                            ;; [1] Rotate octet left to align the selected pixel
     rlca                            ;; [1] Rotate octet left to align the selected pixel
@@ -86,9 +90,9 @@ computeColor:
 
     ld      l,#0                    ;; [2] Future color
     rla                             ;; [1] Move octet bit 7 to carry and bit 3 to bit 4
-    rl      l                       ;; [2] Transfer bit 7 to color bit 0 (LSB of color)
-    rrca                            ;; [1] Move MSB of screen pixel from bit 4 to bit 1
+    rl      l                       ;; [2] Transfer bit 7 to color bit 0 (L starts at 0)
+    rrca                            ;; [1] Move bit 3 of the octet to bit 1 of the color
     rrca                            ;; [1]
     rrca                            ;; [1]
-    or      l                       ;; [1] Combine both color bits into A
+    or      l                       ;; [1] Combine both color bits
     ret                             ;; [3] returns
