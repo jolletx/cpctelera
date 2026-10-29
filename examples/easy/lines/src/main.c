@@ -19,6 +19,9 @@
 
 #include <cpctelera.h>
 
+#include "textm0.h"
+#include "textm1.h"
+
 //------------------------------------------------------------------------------
 // The goal of this example is to demonstrate the line and point drawing functions,
 // it is not a 3D tutorial. The mathematic 3D part will not be detailed.
@@ -106,6 +109,8 @@ const i8 sintable[64] =
 #define FAST_COS(X) sintable[(X + 16)  % 64]
 #define FAST_SIN(X) sintable[X % 64]
 
+
+
 // Copy paste zones 
 #define XSTARTM1  (u16)(10)
 #define YSTARTM1  (u16)(60)
@@ -151,16 +156,18 @@ void TransformAndProject(const SPoint3D* in, SPoint2D* out, u8 angleX, u8 angleY
 void InitScreen(void)
 {
 	cpct_memset_f64(VRAM_PAGE_40, 0x00, 0x4000);
-	cpct_drawStringM1("Press any key to flip vertices / points", VRAM_PAGE_40);
+	cpct_drawSprite(textmode1,cpctm_screenPtr(VRAM_PAGE_40,10,4),TEXTMODE1_W,TEXTMODE1_H);
 
 	cpct_memset_f64(VRAM_PAGE_C0, 0x00, 0x4000);			
-	cpct_drawStringM1("Press any key to flip vertices / points", VRAM_PAGE_C0);
+	cpct_drawSprite(textmode1,cpctm_screenPtr(VRAM_PAGE_C0,10,4),TEXTMODE1_W,TEXTMODE1_H);
 }
 
 /////////////////////////////////////
 // Init mode 1 and colors for speed test and 3D demo
 void InitDisplayM1(void)
 {
+	cpct_memset_f64(CPCT_VMEM_START, 0x00, 0x4000);  // Clear screen
+
 	cpct_setDrawCharM1(1, 0);
     cpct_setVideoMode(1);
 
@@ -175,6 +182,8 @@ void InitDisplayM1(void)
 // Init mode 0 and colors for speed test
 void InitDisplayM0(void)
 {
+	cpct_memset_f64(CPCT_VMEM_START, 0x00, 0x4000);  // Clear Mode 1 pattern before switching mode
+
 	// 16 colors palette (hardware values)
 	static const u8 paletteM0[16] =
 	{
@@ -302,9 +311,11 @@ void SpeedTestM1(void)
 			cpct_drawPlotM1(CPCT_VMEM_START, x+XOFFSETM1, y,col);
 		}
 	}
-	cpct_scanKeyboard_f();
-	while (!cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
-	while (cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();    
+
+	cpct_drawSprite(textmode1,cpctm_screenPtr(VRAM_PAGE_C0,10,4),TEXTMODE1_W,TEXTMODE1_H);
+
+	do { cpct_scanKeyboard_f() ;} while (!cpct_isAnyKeyPressed_f());
+	do { cpct_scanKeyboard_f() ;} while (cpct_isAnyKeyPressed_f());
 }
 
 ////////////////////////////////////////
@@ -383,9 +394,11 @@ void SpeedTestM0(void)
 			cpct_drawPlotM0(CPCT_VMEM_START, x+XOFFSETM0, y, col);
 		}
 	}
-	cpct_scanKeyboard_f();
-	while (!cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
-	while (cpct_isAnyKeyPressed_f()) cpct_scanKeyboard_f();
+
+	cpct_drawSprite(textmode0,cpctm_screenPtr(VRAM_PAGE_C0,10,4),TEXTMODE0_W,TEXTMODE0_H);
+
+	do { cpct_scanKeyboard_f() ;} while (!cpct_isAnyKeyPressed_f());
+	do { cpct_scanKeyboard_f() ;} while (cpct_isAnyKeyPressed_f());
 }
 ////////////////////////////////////////
 // Main demo
@@ -415,7 +428,6 @@ void main(void)
 	// Speed testing in Mode 1 then Mode 0
 	InitDisplayM1();
 	SpeedTestM1();
-	cpct_memset_f64(CPCT_VMEM_START, 0x00, 0x4000);  // Clear Mode 1 pattern before switching mode
 
     // Speed testing in Mode 0
 	InitDisplayM0();

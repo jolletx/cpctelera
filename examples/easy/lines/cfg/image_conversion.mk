@@ -15,6 +15,37 @@
 ##  You should have received a copy of the GNU Lesser General Public License
 ##  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ##------------------------------------------------------------------------------
+
+
+
+##-------------------------------------------------------------------------
+##                      COMPRESSION EXAMPLE
+##-------------------------------------------------------------------------
+## With the following calls an image is converted to mode 0 screen format,
+## and stored as a binary file in 'img/screenformat/' folder. Also,
+## image palette is converted to a C array, creating in 'src/' directory
+## corresponding '.c' and '.h' files.
+##-------------------------------------------------------------------------
+
+## Firmware palette definition for this example
+PALETTE=0 26 18 8
+
+## Set conversion options
+$(eval $(call IMG2SP, SET_MODE, 1))
+$(eval $(call IMG2SP,SET_FOLDER,src/))
+$(eval $(call IMG2SP,SET_IMG_FORMAT,sprites))
+$(eval $(call IMG2SP,SET_OUTPUT,c))
+$(eval $(call IMG2SP,SET_PALETTE_FW,$(PALETTE)))
+
+## Convert image
+$(eval $(call IMG2SP,CONVERT,img/textm1.png, 64, 16,textmode1))
+
+$(eval $(call IMG2SP, SET_MODE, 0))
+$(eval $(call IMG2SP,CONVERT,img/textm0.png, 64, 16,textmode0))
+
+
+
+
 ############################################################################
 ##                        CPCTELERA ENGINE                                ##
 ##                 Automatic image conversion file                        ##

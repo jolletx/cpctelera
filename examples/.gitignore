@@ -1,3 +1,8 @@
 *.dsk
 *.cdt
 *.sna
+
+easy/lines/src/textm0.c
+easy/lines/src/textm0.h
+easy/lines/src/textm1.c
+easy/lines/src/textm1.h

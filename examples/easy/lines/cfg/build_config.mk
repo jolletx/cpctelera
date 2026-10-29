@@ -140,7 +140,7 @@ Z80CCLINKARGS := -mz80 --no-std-crt0 -Wl-u \
 include $(CPCT_PATH)/cfg/global_functions.mk
 
 # Convert images, tilemaps and music
-#include cfg/image_conversion.mk
+include cfg/image_conversion.mk
 #include cfg/tilemap_conversion.mk
 #include cfg/music_conversion.mk
 # Create compressed packs and manage CDT
