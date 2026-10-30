@@ -19,16 +19,16 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-;; Function: cpct_scanFillM1
+;; Function: cpct_scanFillM0
 ;;
-;;    Fills an area defined by a point and its actual color with a new color in Mode 1 (320x200, 4 colors)
+;;    Fills an area defined by a point and its actual color with a new color in Mode 0 (160x200, 16 colors)
 ;;
 ;; Algorithm & Details:
 ;;    Scanline Fill, starting from a point, it fills the area with the color specified.
 ;;    It will stop when it finds a pixel with a different color than the one found initialy
 ;;
 ;; C Definition:
-;;    void cpct_scanFillM1 (u8* vmem, u16 x, u8 y, u8 newColor) __z88dk_callee;
+;;    void cpct_scanFillM0 (u8* vmem, u16 x, u8 y, u8 newColor) __z88dk_callee;
 ;;
 ;; Input Parameters:
 ;;    (2B HL)  vmem       - Base VRAM memory address (typically 0xC000)
@@ -37,7 +37,7 @@
 ;;    (1B  B)  newColor   -  Color to use (0-3)
 ;;
 ;; Assembly call:
-;;    > call cpct_scanFillM1_asm
+;;    > call cpct_scanFillM0_asm
 ;;
 ;; Destroyed Register values:
 ;;    AF, BC, DE, HL
@@ -69,6 +69,16 @@
 ;;                old color if 'not old color' (will slow back to pixel checks if not found)
 ;;                new_color if 'old_color'  (only case we have values ready, else switch back to pixel check)
 ;;                fall back to pixel checking in doubt, exit subLoop if right end of drawn line is reached or passed
+;;
+;; Comment on stack size
+;;    A memory buffer is set to store next points to check above and below vurrent line.
+;;    By default this is a 30 points storage using 2 Bytes each, 60 Bytes.
+;;    If area to fill has a lot of different vertical area to fill
+;;    the algorithm will need all this area. The algorithm stops adding points if 
+;;    buffer is filled. So some area will not be checked and some area may miss in result.
+;;    A simple rectangular area just need 2 points.
+;;    If you know how many elements in stacks you need, you can adjust 
+;;    the STACK_SIZE value to your need and recompile cpctelera to decrease memory need.
 ;;
 ;; (start code)
 ;; Required memory:
@@ -399,7 +409,6 @@ snp_setColorToJump:
 snp_loopFullOctet:
    ld    a,(cur_byte_offset)     ;; [4] a = right X Offset
    cp    e                       ;; [1] compare with current X Offset
-   ;; jr    z, snp_mainLoop      ;; We are on last octet (a == e), move slowly and check with subpixels
    ret   c                       ;; [2/4] We move above last pixel (e > a), ret from there
    ld    a,b                     ;; [1] a = color full octet to skip
    cp    (hl)                    ;; [2] compare with screen octet
